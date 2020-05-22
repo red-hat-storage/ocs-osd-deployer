@@ -17,7 +17,7 @@ spec:
       limits:
         memory: 4Gi
       requests:
-        cpu: 2
+        cpu: 1
         memory: 4Gi
     mgr:
       limits:
@@ -33,12 +33,10 @@ spec:
         memory: 1Gi
     noobaa-core:
       limits:
-        cpu: 10m
         memory: 1Gi
       requests:
     noobaa-db:
       limits:
-        cpu: 10m
         memory: 1Gi
       requests:
   storageDeviceSets:
