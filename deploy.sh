@@ -16,13 +16,9 @@
 
 set -e -x -o pipefail
 
-echo "Hello there!"
+nodes=$((${QUOTA_COUNT:-1} * 3))
+
+sed "s/STORAGE_NODES/${nodes}/" storagecluster.yml
+#kubectl -n openshift-storage apply -f /storagecluster.yml
 
 sleep 999999
-
-sa_dir=/var/run/secrets/kubernetes.io/serviceaccount
-
-kubectl --server=https://kubernetes.default.svc.cluster.local \
-        --token="$(cat $sa_dir/token)" \
-        --certificate-authority="$sa_dir/ca.crt" \
-        -n openshift-storage get all

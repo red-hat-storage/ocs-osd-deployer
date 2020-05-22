@@ -53,6 +53,9 @@ spec:
         app: ocs-osd-deployer
     spec:
       containers:
+        - env:
+            - name: QUOTA_COUNT
+              value: 2
         - name: deployer
           image: quay.io/johnstrunk/ocs-osd-deployer:latest
           imagePullPolicy: Always

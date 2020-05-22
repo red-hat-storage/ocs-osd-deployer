@@ -42,7 +42,7 @@ spec:
       requests:
   storageDeviceSets:
     - name: mydeviceset
-      count: 3
+      count: STORAGE_NODES
       dataPVCTemplate:
         spec:
           storageClassName: gp2
