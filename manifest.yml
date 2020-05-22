@@ -38,6 +38,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ocs-osd-deployer
+  namespace: openshift-storage
 spec:
   selector:
     matchLabels:
@@ -55,4 +56,4 @@ spec:
         - name: deployer
           image: quay.io/johnstrunk/ocs-osd-deployer:latest
           imagePullPolicy: Always
-      ServiceAccountName: ocs-osd-deployer
+      serviceAccountName: ocs-osd-deployer
