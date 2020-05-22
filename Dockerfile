@@ -1,4 +1,3 @@
-# FROM centos:8
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 
 COPY k8s.repo /etc/yum.repos.d/k8s.repo
@@ -9,13 +8,11 @@ RUN microdnf update -y && \
     && microdnf clean all && \
     rm -rf /var/cache/yum
 
-# COPY volrecycler/kubectl-sa.sh /
-# COPY volrecycler/recycler.sh /
-# COPY volrecycler/locker.sh /
+COPY deploy.sh /
+COPY storagecluster.yml /
 
-# RUN chmod 755 /kubectl-sa.sh \
-#               /locker.sh \
-#               /recycler.sh
+RUN chmod 755 /deploy.sh && \
+    chmod 644 /storagecluster.yml
 
 ARG builddate="(unknown)"
 ARG version="(unknown)"
@@ -30,4 +27,4 @@ LABEL org.label-schema.build-date="${builddate}" \
       org.label-schema.vendor="Red Hat" \
       org.label-schema.version="${version}"
 
-ENTRYPOINT [ "/locker.sh" ]
+ENTRYPOINT [ "/deploy.sh" ]
