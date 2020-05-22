@@ -4,6 +4,7 @@ apiVersion: ocs.openshift.io/v1
 kind: StorageCluster
 metadata:
   name: openshift-storage
+  namespace: openshift-storage
 spec:
   manageNodes: false
   monPVCTemplate:

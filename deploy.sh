@@ -14,11 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e -x -o pipefail
+set -e -o pipefail
 
-nodes=$((${QUOTA_COUNT:-1} * 3))
+#-- The Quota (SKU count) comes in as an env var, and we multiply by 3 to get
+#-- the count of OSDs we need to start due to 3x replication
+osds=$((${QUOTA_COUNT:-1} * 3))
 
-sed "s/STORAGE_NODES/${nodes}/" storagecluster.yml
-#kubectl -n openshift-storage apply -f /storagecluster.yml
+echo "Quota count: ${QUOTA_COUNT} -- OSD count: ${osds}"
 
-sleep 999999
+#-- Patch the OSD count into the StorageCluster & apply it
+while true; do
+    sed "s/STORAGE_NODES/${osds}/" storagecluster.yml | \
+      kubectl -n openshift-storage apply -f -
+    sleep 60
+done
+
+echo "Exiting..."

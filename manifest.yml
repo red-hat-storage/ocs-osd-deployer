@@ -15,9 +15,6 @@ rules:
   - apiGroups: ["ocs.openshift.io"]
     resources: ["storageclusters"]
     verbs: ["*"]
-  - apiGroups: [""]
-    resources: ["*"]
-    verbs: ["*"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -55,8 +52,8 @@ spec:
       containers:
         - env:
             - name: QUOTA_COUNT
-              value: 2
-        - name: deployer
+              value: "1"
+          name: deployer
           image: quay.io/johnstrunk/ocs-osd-deployer:latest
           imagePullPolicy: Always
       serviceAccountName: ocs-osd-deployer
