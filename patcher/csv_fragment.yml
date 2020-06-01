@@ -1,0 +1,33 @@
+---
+spec:
+  install:
+    spec:
+      permissions:
+        - serviceAccountName: ocs-osd-deployer
+          rules:
+            - apiGroups: ["ocs.openshift.io"]
+              resources: ["storageclusters"]
+              verbs: ["*"]
+      deployments:
+        - name: ocs-osd-deployer
+          spec:
+            selector:
+              matchLabels:
+                app: ocs-osd-deployer
+            replicas: 1
+            strategy:
+              # On update, kill all the old then create the new
+              type: Recreate
+            template:
+              metadata:
+                labels:
+                  app: ocs-osd-deployer
+              spec:
+                containers:
+                  - env:
+                      - name: QUOTA_COUNT
+                        value: "{{ quotaCount }}"
+                    name: deployer
+                    image: quay.io/johnstrunk/ocs-osd-deployer:latest
+                    imagePullPolicy: Always
+                serviceAccountName: ocs-osd-deployer
