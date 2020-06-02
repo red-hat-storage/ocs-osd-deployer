@@ -28,8 +28,9 @@ docker run --rm --entrypoint /bin/bash "$IMAGE" -c "tar cf - -C /manifests ." | 
 while IFS= read -r -d '' csv
 do
     echo "Patching $csv ..."
-    yq m -a "$csv" "$SCRIPTDIR/csv_fragment.yml" > "$csv.j2"
-    rm -f "$csv"
+    # yq m -a "$csv" "$SCRIPTDIR/csv_fragment.yml" > "$csv.j2"
+    # rm -f "$csv"
+    yq m -a -i "$csv" "$SCRIPTDIR/csv_fragment.yml"
 done <   <(find . -name '*clusterserviceversion.yaml' -print0)
 
 echo
