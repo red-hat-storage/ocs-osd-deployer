@@ -3,9 +3,13 @@
 apiVersion: ocs.openshift.io/v1
 kind: StorageCluster
 metadata:
-  name: openshift-storage
+  name: ocs-storagecluster
   namespace: openshift-storage
 spec:
+  # The empty label selector removes the default so components can run an all
+  # worker nodes.
+  labelSelector:
+    matchExpressions: []
   manageNodes: false
   monPVCTemplate:
     spec:
