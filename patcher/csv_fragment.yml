@@ -30,4 +30,12 @@ spec:
                     name: deployer
                     image: quay.io/johnstrunk/ocs-osd-deployer:latest
                     imagePullPolicy: Always
+                    volumeMounts:
+                      - mountPath: /sc-override
+                        name: config-volume
                 serviceAccountName: ocs-osd-deployer
+                volumes:
+                  - configMap:
+                      name: sc-config
+                      optional: true
+                    name: config-volume
