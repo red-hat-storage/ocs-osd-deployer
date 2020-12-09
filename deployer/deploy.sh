@@ -22,9 +22,16 @@ osds=$((${QUOTA_COUNT:-1} * 3))
 
 echo "Quota count: ${QUOTA_COUNT} -- OSD count: ${osds}"
 
+#-- The path mapped to StorageCluster configmap used for overriding.
+overridePath="/sc-override/storagecluster.yml"
+
 #-- Patch the OSD count into the StorageCluster & apply it
+#-- If config map containing StorageCluster exists, apply it. 
+#-- Else, apply the default StorageCluster.
 while true; do
-    sed "s/STORAGE_NODES/${osds}/" storagecluster.yml | \
+    storageClusterPath="storagecluster.yml"
+    [ -f $overridePath ] && storageClusterPath=$overridePath
+    sed "s/STORAGE_NODES/${osds}/" $storageClusterPath | \
       kubectl -n openshift-storage apply -f -
     sleep 60
 done
