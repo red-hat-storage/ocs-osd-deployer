@@ -12,6 +12,12 @@ Usage:
 USAGE
 }
 
+function finish {
+  docker rm -f dummy > /dev/null 2>&1
+}
+trap finish EXIT
+
+
 if [[ $# -ne 2 ]]; then
     usage
     exit 1
@@ -23,19 +29,33 @@ DEST="$2"
 
 mkdir -p "$DEST"
 cd "$DEST"
-docker run --rm --entrypoint /bin/bash "$IMAGE" -c "tar cf - -C /manifests ." | tar xf -
+
+
+#docker run --rm --entrypoint /bin/bash "$IMAGE" -c "tar cf - -C /manifests ." | tar xf -
+
+#Bundle images do not have a runtime so the "docker run" command fails
+
+docker create -ti --name dummy "$IMAGE" bash
+docker cp dummy:/manifests .
+docker rm -f dummy
+
 
 while IFS= read -r -d '' csv
 do
     echo "Patching $csv ..."
     # yq m -a "$csv" "$SCRIPTDIR/csv_fragment.yml" > "$csv.j2"
     # rm -f "$csv"
-    yq m -a -i "$csv" "$SCRIPTDIR/csv_fragment.yml"
+    yq m -a append -i "$csv" "$SCRIPTDIR/csv_fragment.yml"
 done <   <(find . -name '*clusterserviceversion.yaml' -print0)
 
-echo
-echo "=============="
-echo "= Update the addon.yaml with the following information:"
-echo
-cat ocs-operator.package.yaml
-rm -f ocs-operator.package.yaml
+
+#This file is not available in the bundle image
+
+if [ -f "ocs-operator.package.yaml" ]; then
+	echo
+	echo "=============="
+	echo "= Update the addon.yaml with the following information:"
+	echo
+	cat ocs-operator.package.yaml
+	rm -f ocs-operator.package.yaml
+fi
