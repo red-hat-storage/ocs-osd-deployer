@@ -1,0 +1,24 @@
+# permissions for end users to edit managedocs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: managedocs-editor-role
+rules:
+- apiGroups:
+  - ocs.openshift.io
+  resources:
+  - managedocs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ocs.openshift.io
+  resources:
+  - managedocs/status
+  verbs:
+  - get
