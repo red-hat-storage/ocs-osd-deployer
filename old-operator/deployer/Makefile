@@ -1,4 +1,4 @@
-CONTAINER_REPO := quay.io/johnstrunk
+CONTAINER_REPO := quay.io/kesavanvt
 CONTAINER_IMAGE := ocs-osd-deployer
 
 BUILDDATE := $(shell date -u '+%Y-%m-%dT%H:%M:%S.%NZ')
