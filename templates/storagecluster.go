@@ -21,10 +21,14 @@ const StorageClusterTemplate = `
 apiVersion: ocs.openshift.io/v1
 kind: StorageCluster
 spec:
-  # The empty label selector removes the default so components can run an all
-  # worker nodes.
+  # The label selector is used to select only the worker nodes for
+  # both labeling and scheduling.
   labelSelector:
-    matchExpressions: []
+    matchExpressions:
+      - key: node-role.kubernetes.io/worker
+        operator: Exists
+      - key: node-role.kubernetes.io/infra
+        operator: DoesNotExist
   manageNodes: false
   monPVCTemplate:
     spec:
