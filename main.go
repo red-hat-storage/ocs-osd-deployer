@@ -40,7 +40,8 @@ import (
 )
 
 const (
-	namespaceEnvVar = "NAMESPACE"
+	namespaceEnvVar    = "NAMESPACE"
+	configSecretEnvVar = "CONFIG"
 )
 
 var (
@@ -88,9 +89,10 @@ func main() {
 	}
 
 	if err = (&controllers.ManagedOCSReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme: mgr.GetScheme(),
+		Client:           mgr.GetClient(),
+		Log:              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:           mgr.GetScheme(),
+		ConfigSecretName: getConfigName(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -117,6 +119,16 @@ func getNamespace() (string, error) {
 		return "", err
 	}
 	return ns, nil
+}
+
+// The name of the secret containing the addon params
+func getConfigName() string {
+
+	configName, found := os.LookupEnv(configSecretEnvVar)
+	if !found {
+		configName = controllers.AddonSecretName
+	}
+	return configName
 }
 
 func ensureManagedOCS(c client.Client, log logr.Logger, namespace string) error {
