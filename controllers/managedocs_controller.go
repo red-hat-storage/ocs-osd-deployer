@@ -26,7 +26,6 @@ import (
 	"github.com/openshift/ocs-osd-deployer/templates"
 	"github.com/openshift/ocs-osd-deployer/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,15 +39,8 @@ import (
 )
 
 const (
-	storageClusterName = "ocs-storagecluster"
-)
-
-// AddonSecretName is the secret name
-const (
-	AddonSecretName string = "addon-ocs-converged-parameters"
-)
-
-const (
+	storageClusterName         = "ocs-storagecluster"
+	addonSecretName     string = "addon-ocs-converged-parameters"
 	storageClassSizeKey string = "size"
 )
 
@@ -72,32 +64,16 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	mapFn := handler.ToRequestsFunc(
 		func(obj handler.MapObject) []reconcile.Request {
-			return []reconcile.Request{
-				{NamespacedName: types.NamespacedName{
-					Name:      "managedocs",
-					Namespace: obj.Meta.GetNamespace(),
-				}},
+			if obj.Meta.GetName() == r.ConfigSecretName {
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      "managedocs",
+						Namespace: obj.Meta.GetNamespace(),
+					}},
+				}
 			}
+			return nil
 		})
-
-	/* 	p := predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			// The object name is not the secret name, so the event will be
-			// ignored.
-			name := e.MetaOld.GetName()
-			if name != AddonSecretName {
-				return false
-			}
-			return e.ObjectOld != e.ObjectNew
-		},
-		CreateFunc: func(e event.CreateEvent) bool {
-			name := e.Meta.GetName()
-			if name != AddonSecretName {
-				return false
-			}
-			return true
-		},
-	} */
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.ManagedOCS{}).
@@ -114,7 +90,7 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	log := r.Log.WithValues("req.Namespace", req.Namespace, "req.Name", req.Name)
 	log.Info("Reconciling ManagedOCS")
 
-	var err error
+	//var err error
 	r.ctx = context.Background()
 
 	// Load the managed ocs resource
@@ -124,7 +100,7 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	}
 
 	// Run the reconcile phases
-	err = r.reconcilePhases(req)
+	err := r.reconcilePhases(req)
 
 	// Ensure status is updated once even on failed reconciles
 	statusErr := r.Status().Update(r.ctx, r.managedOCS)
@@ -147,15 +123,6 @@ func (r *ManagedOCSReconciler) reconcilePhases(req ctrl.Request) error {
 	}
 	r.managedOCS.Status.ReconcileStrategy = reconcileStrategy
 
-	configSecret := &corev1.Secret{}
-	err := r.Get(r.ctx, types.NamespacedName{Namespace: req.Namespace, Name: r.ConfigSecretName}, configSecret)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		} else {
-			configSecret = nil
-		}
-	}
 	// Create or update an existing storage cluster
 	storageCluster := &ocsv1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,7 +131,7 @@ func (r *ManagedOCSReconciler) reconcilePhases(req ctrl.Request) error {
 		},
 	}
 	if _, err := ctrlutil.CreateOrUpdate(r.ctx, r, storageCluster, func() error {
-		return r.setDesiredStorageCluster(reconcileStrategy, storageCluster, configSecret)
+		return r.setDesiredStorageCluster(reconcileStrategy, storageCluster)
 	}); err != nil {
 		return err
 	}
@@ -175,8 +142,7 @@ func (r *ManagedOCSReconciler) reconcilePhases(req ctrl.Request) error {
 // Set the desired stats for the storage cluster resource
 func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 	reconcileStrategy v1.ReconcileStrategy,
-	sc *ocsv1.StorageCluster,
-	cs *corev1.Secret) error {
+	sc *ocsv1.StorageCluster) error {
 	r.Log.Info("Reconciling storagecluster", "ReconcileStrategy", reconcileStrategy)
 
 	// Ensure ownership on the storage cluster CR
@@ -186,53 +152,28 @@ func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 
 	// Handle strict mode reconciliation
 	if reconcileStrategy == v1.ReconcileStrategyStrict {
+		configSecret := &corev1.Secret{}
+		if err := r.Get(r.ctx, types.NamespacedName{Namespace: sc.ObjectMeta.Namespace, Name: r.ConfigSecretName}, configSecret); err != nil {
+			// Do not create the StorageCluster if the addon param secret is missing
+			r.Log.Info("Failed to get the addon param secret. Not reconciling the storage cluster.", "SecretName", r.ConfigSecretName)
+
+			return err
+		}
+		sdata := configSecret.Data
+
 		// Get an instance of the desired state
 		desired := utils.ObjectFromTemplate(templates.StorageClusterTemplate, r.Scheme).(*ocsv1.StorageCluster)
-		r.updateStorageClusterWithParams(desired, cs)
+
+		PersistentVolume := &desired.Spec.StorageDeviceSets[0].DataPVCTemplate
+		PersistentVolume.Spec.Resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				"storage": resource.MustParse(string(sdata[storageClassSizeKey])),
+			},
+		}
 		// Override storage cluster spec with desired spec from the template.
 		// We do not replace meta or status on purpose
 		sc.Spec = desired.Spec
-		r.Log.Info("StorageCluster", "desiredSpec", desired.Spec)
-		r.Log.Info("StorageCluster", "Current spec", sc.Spec)
 	}
 
 	return nil
-}
-
-func (r *ManagedOCSReconciler) updateStorageClusterWithParams(
-	sc *ocsv1.StorageCluster,
-	cs *corev1.Secret) error {
-
-	if cs == nil {
-		return nil
-	}
-	r.Log.Info("Updating storagecluster")
-
-	sdata := cs.Data
-
-	for key, element := range sdata {
-		r.Log.Info("Secret keys:", "key", key, "value", string(element))
-		PersistentVolume := &sc.Spec.StorageDeviceSets[0].DataPVCTemplate
-		if isValidStorageClusterParam(key, string(sdata[key])) {
-			PersistentVolume.Spec.Resources = corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					"storage": resource.MustParse(string(sdata[key])),
-				},
-			}
-		}
-		r.Log.Info("Post updation Persistent Volume ", "PV", PersistentVolume)
-	}
-
-	return nil
-}
-
-func isValidStorageClusterParam(key string, val string) bool {
-
-	if key == storageClassSizeKey {
-		if val != "1Ti" && val != "4Ti" {
-			return false
-		}
-		return true
-	}
-	return false
 }

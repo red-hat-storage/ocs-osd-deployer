@@ -49,6 +49,11 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// EnvVars struct holds environment vars
+type EnvVars struct {
+	configName string
+}
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
@@ -69,9 +74,16 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	var envVars EnvVars
+
 	namespace, err := getNamespace()
 	if err != nil {
 		setupLog.Error(err, "unable to get namespace name")
+		os.Exit(1)
+	}
+
+	if err = getEnvVars(&envVars); err != nil {
+		setupLog.Error(err, "unable to get required paramaters")
 		os.Exit(1)
 	}
 
@@ -92,7 +104,7 @@ func main() {
 		Client:           mgr.GetClient(),
 		Log:              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
 		Scheme:           mgr.GetScheme(),
-		ConfigSecretName: getConfigName(),
+		ConfigSecretName: envVars.configName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -122,13 +134,16 @@ func getNamespace() (string, error) {
 }
 
 // The name of the secret containing the addon params
-func getConfigName() string {
+func getEnvVars(envVars *EnvVars) error {
 
-	configName, found := os.LookupEnv(configSecretEnvVar)
+	envVar, found := os.LookupEnv(configSecretEnvVar)
 	if !found {
-		configName = controllers.AddonSecretName
+		err := fmt.Errorf("%s must be set", configSecretEnvVar)
+		return err
 	}
-	return configName
+	envVars.configName = envVar
+
+	return nil
 }
 
 func ensureManagedOCS(c client.Client, log logr.Logger, namespace string) error {
