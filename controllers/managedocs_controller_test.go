@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,7 +19,8 @@ import (
 var _ = Describe("ManagedOCS controller", func() {
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
-		ManagedOCSName = "test-managedocs"
+		ManagedOCSName   = "test-managedocs"
+		ConfigSecretName = "test-secret"
 		// TestNamespace  = "test-managedocs-namespace"
 		TestNamespace = "default"
 
@@ -44,7 +46,7 @@ var _ = Describe("ManagedOCS controller", func() {
 	}
 
 	Context("reconcile()", func() {
-		When("there is no storage clsuter resource in the cluster", func() {
+		When("there is no storage cluster resource in the cluster", func() {
 			It("should create a new storage cluster", func() {
 				ctx := context.Background()
 
@@ -60,6 +62,23 @@ var _ = Describe("ManagedOCS controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+
+				// No storage cluster should be created if the addon param secret does not exist
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+
+				data := make(map[string][]byte)
+				data["size"] = []byte("1Ti")
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ConfigSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: data,
+				}
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
 
 				sc := &ocsv1.StorageCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -93,7 +112,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 
 		When("the storage cluster is modfied while in strict mode", func() {
-			It("should revert the changes and bring the storage clsuter back to its managed state", func() {
+			It("should revert the changes and bring the storage cluster back to its managed state", func() {
 				ctx := context.Background()
 
 				// Verify strict mode
