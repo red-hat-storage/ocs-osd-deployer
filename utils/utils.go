@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// ObjectFromTemplate reutrn a runtime object based on a text yaml/json string template
+// ObjectFromTemplate returns a runtime object based on a text yaml/json string template
 func ObjectFromTemplate(text string, scheme *runtime.Scheme) runtime.Object {
 	// Decode text (yaml/json) to kube api object
 	deserializer := serializer.NewCodecFactory(scheme).UniversalDeserializer()

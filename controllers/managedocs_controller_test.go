@@ -171,8 +171,82 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 		})
 
+		When("the storeage cluster is not ready", func() {
+			ctx := context.Background()
+			managedOCS := &v1.ManagedOCS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ManagedOCSName,
+					Namespace: TestNamespace,
+				},
+			}
+
+			BeforeEach(func() {
+				// This test, like the ones below it, assume managed-ocs is already created.
+				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+
+				// Ensure that the storage cluster is not ready
+				// This test, like the ones below it, assume a StorageCluster is already created.
+				sc := ocsv1.StorageCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      storageClusterName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Get(ctx, getResourceKey(&sc), &sc)).Should(Succeed())
+
+				// Updating the Status of the StorageCluster should trigger a reconcile
+				// for managed-ocs
+				sc.Status.Phase = "Pending"
+				Expect(k8sClient.Status().Update(ctx, &sc)).Should(Succeed())
+			})
+
+			It("should reflect the sc status in the managed-ocs cr", func() {
+				Eventually(func() v1.ComponentState {
+					Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					return managedOCS.Status.Components.StorageCluster.State
+				}, timeout, interval).Should(Equal(v1.ComponentPending))
+			})
+		})
+
+		When("the storeage cluster is ready", func() {
+			ctx := context.Background()
+			managedOCS := &v1.ManagedOCS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ManagedOCSName,
+					Namespace: TestNamespace,
+				},
+			}
+
+			BeforeEach(func() {
+				// This test, like the ones below it, assume managed-ocs is already created.
+				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+
+				// Ensure that the storage cluster is not ready
+				// This test, like the ones below it, assume a StorageCluster is already created.
+				sc := ocsv1.StorageCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      storageClusterName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Get(ctx, getResourceKey(&sc), &sc)).Should(Succeed())
+
+				// Updating the Status of the StorageCluster should trigger a reconcile
+				// for managed-ocs
+				sc.Status.Phase = "Ready"
+				Expect(k8sClient.Status().Update(ctx, &sc)).Should(Succeed())
+			})
+
+			It("should reflect the sc status in the managed-ocs cr", func() {
+				Eventually(func() v1.ComponentState {
+					Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					return managedOCS.Status.Components.StorageCluster.State
+				}, timeout, interval).Should(Equal(v1.ComponentReady))
+			})
+		})
+
 		When("the storage cluster is deleted", func() {
-			It("Should create a new storage cluster in the namespace", func() {
+			It("should create a new storage cluster in the namespace", func() {
 				ctx := context.Background()
 				sc := &ocsv1.StorageCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -184,6 +258,7 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Delete the strorage cluster
 				Expect(k8sClient.Delete(ctx, sc)).Should(Succeed())
+				// Race condition: this needs to occur before reconciliation loop runs.
 				Expect(k8sClient.Get(ctx, getResourceKey(sc), sc)).Should(
 					WithTransform(errors.IsNotFound, BeTrue()))
 
@@ -192,8 +267,8 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 		})
 
-		When("the storage cluster is modfied while in strict mode", func() {
-			It("should revert the changes and bring the storage clsuter back to its managed state", func() {
+		When("the storage cluster is modified while in strict mode", func() {
+			It("should revert the changes and bring the storage cluster back to its managed state", func() {
 				ctx := context.Background()
 
 				// Verify strict mode

@@ -39,9 +39,23 @@ spec:
           status:
             description: ManagedOCSStatus defines the observed state of ManagedOCS
             properties:
+              components:
+                properties:
+                  storageCluster:
+                    properties:
+                      state:
+                        type: string
+                    required:
+                    - state
+                    type: object
+                required:
+                - storageCluster
+                type: object
               reconcileStrategy:
                 description: ReconcileStrategy represent the action the deployer should take whenever a recncile event occures
                 type: string
+            required:
+            - components
             type: object
         type: object
     served: true
