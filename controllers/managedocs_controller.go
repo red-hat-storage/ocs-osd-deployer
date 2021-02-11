@@ -47,8 +47,10 @@ type ManagedOCSReconciler struct {
 	managedOCS *v1.ManagedOCS
 }
 
-// +kubebuilder:rbac:groups=ocs.openshift.io,resources=managedocs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ocs.openshift.io,resources=managedocs/status,verbs=get;update;patch
+// Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
+// +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources={managedocs,managedocs/finalizers},verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=managedocs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=storageclusters,verbs=get;list;watch;create;update;patch;delete
 
 // SetupWithManager TODO
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {

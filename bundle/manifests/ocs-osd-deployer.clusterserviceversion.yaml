@@ -39,26 +39,6 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
-          - ocs.openshift.io
-          resources:
-          - managedocs
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - ocs.openshift.io
-          resources:
-          - managedocs/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
           - authentication.k8s.io
           resources:
           - tokenreviews
@@ -145,6 +125,39 @@ spec:
           verbs:
           - create
           - patch
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - managedocs
+          - managedocs/finalizers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - managedocs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - storageclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         serviceAccountName: default
     strategy: deployment
   installModes:
