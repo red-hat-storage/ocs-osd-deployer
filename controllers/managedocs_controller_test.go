@@ -19,8 +19,7 @@ import (
 var _ = Describe("ManagedOCS controller", func() {
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
-		ManagedOCSName   = "test-managedocs"
-		ConfigSecretName = "test-secret"
+		ManagedOCSName = "test-managedocs"
 		// TestNamespace  = "test-managedocs-namespace"
 		TestNamespace = "default"
 
@@ -46,13 +45,24 @@ var _ = Describe("ManagedOCS controller", func() {
 	}
 
 	Context("reconcile()", func() {
-		When("there is no storage cluster resource in the cluster", func() {
-			It("should create a new storage cluster", func() {
+		When("There is no addonParam secret in the cluster", func() {
+			It("should not create a new storage cluster", func() {
 				ctx := context.Background()
 
 				scList := &ocsv1.StorageClusterList{}
+
 				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
 				Expect(scList.Items).Should(HaveLen(0))
+
+				// addon param secret does not exist
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      AddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(
+					WithTransform(errors.IsNotFound, BeTrue()))
 
 				managedOCS := &v1.ManagedOCS{
 					ObjectMeta: metav1.ObjectMeta{
@@ -63,22 +73,90 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
-				// No storage cluster should be created if the addon param secret does not exist
+				defer func() {
+					Expect(k8sClient.Delete(context.Background(), managedOCS)).Should(Succeed())
+				}()
+				// No storage cluster should be created
+				scList = &ocsv1.StorageClusterList{}
+
 				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
 				Expect(scList.Items).Should(HaveLen(0))
 
+			})
+		})
+		When("there is incorrect data in the secret", func() {
+			It("should not create a new storage cluster", func() {
+				ctx := context.Background()
+
+				scList := &ocsv1.StorageClusterList{}
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+
+				// Create the secret
 				data := make(map[string][]byte)
-				data["size"] = []byte("1Ti")
+				data["size"] = []byte("1.5Ti")
 
 				secret := &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      ConfigSecretName,
+						Name:      AddOnParamsSecretName,
 						Namespace: TestNamespace,
 					},
 					Data: data,
 				}
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+
+				defer func() {
+					Expect(k8sClient.Delete(context.Background(), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
+				}()
+				// No storage cluster should be created
+				scList = &ocsv1.StorageClusterList{}
+
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+			})
+		})
+
+		When("there is no storage cluster resource in the cluster", func() {
+			It("should create a new storage cluster", func() {
+				ctx := context.Background()
+
+				scList := &ocsv1.StorageClusterList{}
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+
+				// Create the secret
+				data := make(map[string][]byte)
+				data["size"] = []byte("1Ti")
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      AddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: data,
+				}
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				sc := &ocsv1.StorageCluster{
 					ObjectMeta: metav1.ObjectMeta{

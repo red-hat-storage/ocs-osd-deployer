@@ -11,12 +11,8 @@ rules:
   resources:
   - secrets
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - ocs.openshift.io
@@ -38,3 +34,9 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ocs.openshift.io
+  resources:
+  - storageclusters
+  verbs:
+  - '*'

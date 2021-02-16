@@ -43,6 +43,8 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 
+const AddOnParamsSecretName = "test-secret"
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -84,7 +86,7 @@ var _ = BeforeSuite(func(done Done) {
 		Client:           k8sManager.GetClient(),
 		Log:              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
 		Scheme:           scheme.Scheme,
-		ConfigSecretName: "test-secret",
+		ConfigSecretName: AddOnParamsSecretName,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

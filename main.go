@@ -40,19 +40,16 @@ import (
 )
 
 const (
-	namespaceEnvVar    = "NAMESPACE"
-	configSecretEnvVar = "CONFIG"
+	namespaceEnvVarName         = "NAMESPACE"
+	addonParamsSecretEnvVarName = "ADDON_PARAMS_SECRET"
 )
 
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	// EnvVars holds the values of all the env variables
+	EnvVars = make(map[string]string)
 )
-
-// EnvVars struct holds environment vars
-type EnvVars struct {
-	configName string
-}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -74,16 +71,15 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	var envVars EnvVars
+	/*
+		namespace, err := getNamespace()
+		if err != nil {
+			setupLog.Error(err, "unable to get namespace name")
+			os.Exit(1)
+		} */
 
-	namespace, err := getNamespace()
-	if err != nil {
-		setupLog.Error(err, "unable to get namespace name")
-		os.Exit(1)
-	}
-
-	if err = getEnvVars(&envVars); err != nil {
-		setupLog.Error(err, "unable to get required paramaters")
+	if err := getEnvVars(EnvVars); err != nil {
+		setupLog.Error(err, "Failed to get the environment variables")
 		os.Exit(1)
 	}
 
@@ -93,7 +89,7 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "e0c63ac0.openshift.io",
-		Namespace:          namespace,
+		Namespace:          EnvVars[namespaceEnvVarName],
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -104,44 +100,50 @@ func main() {
 		Client:           mgr.GetClient(),
 		Log:              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
 		Scheme:           mgr.GetScheme(),
-		ConfigSecretName: envVars.configName,
+		ConfigSecretName: EnvVars[addonParamsSecretEnvVarName],
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err := ensureManagedOCS(mgr.GetClient(), setupLog, namespace); err != nil {
+	if err := ensureManagedOCS(mgr.GetClient(), setupLog, EnvVars[namespaceEnvVarName]); err != nil {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "Problem running manager")
 		os.Exit(1)
 	}
 }
 
-// getWatchNamespace returns the Namespace the operator should be watching for changes
+/* // getWatchNamespace returns the Namespace the operator should be watching for changes
 func getNamespace() (string, error) {
 
-	ns, found := os.LookupEnv(namespaceEnvVar)
+	ns, found := os.LookupEnv(namespaceEnvVarName)
 	if !found {
-		err := fmt.Errorf("%s must be set", namespaceEnvVar)
+		err := fmt.Errorf("%s must be set", namespaceEnvVarName)
 		return "", err
 	}
 	return ns, nil
 }
-
+*/
 // The name of the secret containing the addon params
-func getEnvVars(envVars *EnvVars) error {
-
-	envVar, found := os.LookupEnv(configSecretEnvVar)
+func getEnvVars(m map[string]string) error {
+	val, found := os.LookupEnv(namespaceEnvVarName)
 	if !found {
-		err := fmt.Errorf("%s must be set", configSecretEnvVar)
+		err := fmt.Errorf("%s must be set", namespaceEnvVarName)
 		return err
 	}
-	envVars.configName = envVar
+	m[namespaceEnvVarName] = val
+
+	val, found = os.LookupEnv(addonParamsSecretEnvVarName)
+	if !found {
+		err := fmt.Errorf("%s must be set", addonParamsSecretEnvVarName)
+		return err
+	}
+	m[addonParamsSecretEnvVarName] = val
 
 	return nil
 }
@@ -162,7 +164,7 @@ func ensureManagedOCS(c client.Client, log logr.Logger, namespace string) error 
 		return nil
 
 	} else {
-		log.Error(err, "unable to create ManagedOCS resource")
+		log.Error(err, "Unable to create the ManagedOCS resource")
 		return err
 	}
 }

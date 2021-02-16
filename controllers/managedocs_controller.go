@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -39,25 +40,25 @@ import (
 )
 
 const (
-	storageClusterName         = "ocs-storagecluster"
-	addonSecretName     string = "addon-ocs-converged-parameters"
-	storageClassSizeKey string = "size"
+	storageClusterName   = "ocs-storagecluster"
+	addonParamSecretName = "addon-ocs-converged-parameters"
+	storageClassSizeKey  = "size"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
 type ManagedOCSReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-	ctx    context.Context
-
+	Log              logr.Logger
+	Scheme           *runtime.Scheme
+	ctx              context.Context
 	managedOCS       *v1.ManagedOCS
 	ConfigSecretName string
 }
 
 // +kubebuilder:rbac:groups=ocs.openshift.io,resources=managedocs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ocs.openshift.io,resources=managedocs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ocs.openshift.io,resources=storageclusters,verbs=*
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;
 
 // SetupWithManager TODO
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -80,7 +81,6 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&ocsv1.StorageCluster{}).
 		Watches(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestsFromMapFunc{
 			ToRequests: mapFn},
-		//p,
 		).
 		Complete(r)
 }
@@ -90,7 +90,6 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	log := r.Log.WithValues("req.Namespace", req.Namespace, "req.Name", req.Name)
 	log.Info("Reconciling ManagedOCS")
 
-	//var err error
 	r.ctx = context.Background()
 
 	// Load the managed ocs resource
@@ -147,6 +146,7 @@ func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 
 	// Ensure ownership on the storage cluster CR
 	if err := ctrlutil.SetControllerReference(r.managedOCS, sc, r.Scheme); err != nil {
+		r.Log.Error(err, "Failed to set controller reference on the managedOCS resource")
 		return err
 	}
 
@@ -154,21 +154,14 @@ func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 	if reconcileStrategy == v1.ReconcileStrategyStrict {
 		configSecret := &corev1.Secret{}
 		if err := r.Get(r.ctx, types.NamespacedName{Namespace: sc.ObjectMeta.Namespace, Name: r.ConfigSecretName}, configSecret); err != nil {
-			// Do not create the StorageCluster if the addon param secret is missing
-			r.Log.Info("Failed to get the addon param secret. Not reconciling the storage cluster.", "SecretName", r.ConfigSecretName)
-
+			// Do not create the StorageCluster if the we fail to get the addon param secret
+			r.Log.Error(err, "Failed to get the addon param secret. Not reconciling the storage cluster.", "SecretName", r.ConfigSecretName)
 			return err
 		}
-		sdata := configSecret.Data
 
-		// Get an instance of the desired state
-		desired := utils.ObjectFromTemplate(templates.StorageClusterTemplate, r.Scheme).(*ocsv1.StorageCluster)
-
-		PersistentVolume := &desired.Spec.StorageDeviceSets[0].DataPVCTemplate
-		PersistentVolume.Spec.Resources = corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				"storage": resource.MustParse(string(sdata[storageClassSizeKey])),
-			},
+		desired, err := r.generateStorageClusterWithParams(configSecret)
+		if err != nil {
+			return err
 		}
 		// Override storage cluster spec with desired spec from the template.
 		// We do not replace meta or status on purpose
@@ -176,4 +169,35 @@ func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 	}
 
 	return nil
+}
+
+func (r *ManagedOCSReconciler) generateStorageClusterWithParams(configSecret *corev1.Secret) (*ocsv1.StorageCluster, error) {
+	sdata := configSecret.Data
+	requestedStorageCapacity, err := resource.ParseQuantity(string(sdata[storageClassSizeKey]))
+	if err != nil {
+		r.Log.Error(err, "Missing or incorrect parameter in the addonparam secret", "Key", storageClassSizeKey)
+		return nil, err
+	}
+	r.Log.Info("Addon param data", "Storage Cluster Size", requestedStorageCapacity)
+
+	osdSize, _ := resource.ParseQuantity("1Ti")
+
+	// The request must be an exact multiple of the base OSD size
+	rem := requestedStorageCapacity.Value() % osdSize.Value()
+
+	if rem != 0 {
+		err := fmt.Errorf("Storage cluster size must be a multiple of %v", osdSize)
+		return nil, err
+	}
+	count := requestedStorageCapacity.Value() / osdSize.Value()
+	desired := utils.ObjectFromTemplate(templates.StorageClusterTemplate, r.Scheme).(*ocsv1.StorageCluster)
+
+	desired.Spec.StorageDeviceSets[0].Count = int(count)
+	persistentVolume := &desired.Spec.StorageDeviceSets[0].DataPVCTemplate
+	persistentVolume.Spec.Resources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			"storage": osdSize,
+		},
+	}
+	return desired, nil
 }

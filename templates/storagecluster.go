@@ -16,7 +16,7 @@ limitations under the License.
 
 package templates
 
-// StorageClusterTemplate is the template that serves as the base for the storage clsuter deployed by the operator
+// StorageClusterTemplate is the template that serves as the base for the storage cluster deployed by the operator
 const StorageClusterTemplate = `
 apiVersion: ocs.openshift.io/v1
 kind: StorageCluster
@@ -61,7 +61,7 @@ spec:
       requests: {}
   storageDeviceSets:
     - name: mydeviceset
-      count: 3 
+      count: 1
       dataPVCTemplate:
         spec:
           storageClassName: gp2
@@ -70,9 +70,10 @@ spec:
           volumeMode: Block
           resources:
             requests:
-              storage: 1000Gi
+              storage: 1Ti
       placement: {}
       portable: true
+      replica: 3
       resources:
         limits:
           cpu: 2000m
