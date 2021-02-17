@@ -57,12 +57,6 @@ spec:
       requests:
         cpu: 1000m
         memory: 2Gi
-    noobaa-core:
-      limits: {}
-      requests: {}
-    noobaa-db:
-      limits: {}
-      requests: {}
   storageDeviceSets:
     - name: mydeviceset
       count: 3 
@@ -84,4 +78,6 @@ spec:
         requests:
           cpu: 1000m
           memory: 5Gi
+  multiCloudGateway:
+    reconcileStrategy: "ignore"
 `
