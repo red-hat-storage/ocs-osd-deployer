@@ -50,7 +50,7 @@ spec:
           - subjectaccessreviews
           verbs:
           - create
-        serviceAccountName: default
+        serviceAccountName: ocs-osd-deployer
       deployments:
       - name: ocs-osd-controller-manager
         spec:
@@ -95,6 +95,7 @@ spec:
                   requests:
                     cpu: 100m
                     memory: 20Mi
+              serviceAccountName: ocs-osd-deployer
               terminationGracePeriodSeconds: 10
       permissions:
       - rules:
@@ -158,7 +159,7 @@ spec:
           - patch
           - update
           - watch
-        serviceAccountName: default
+        serviceAccountName: ocs-osd-deployer
     strategy: deployment
   installModes:
   - supported: false
