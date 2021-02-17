@@ -39,26 +39,6 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
-          - ocs.openshift.io
-          resources:
-          - managedocs
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - ocs.openshift.io
-          resources:
-          - managedocs/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
           - authentication.k8s.io
           resources:
           - tokenreviews
@@ -70,7 +50,7 @@ spec:
           - subjectaccessreviews
           verbs:
           - create
-        serviceAccountName: default
+        serviceAccountName: ocs-osd-deployer
       deployments:
       - name: ocs-osd-controller-manager
         spec:
@@ -115,6 +95,7 @@ spec:
                   requests:
                     cpu: 100m
                     memory: 20Mi
+              serviceAccountName: ocs-osd-deployer
               terminationGracePeriodSeconds: 10
       permissions:
       - rules:
@@ -145,7 +126,40 @@ spec:
           verbs:
           - create
           - patch
-        serviceAccountName: default
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - managedocs
+          - managedocs/finalizers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - managedocs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - storageclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        serviceAccountName: ocs-osd-deployer
     strategy: deployment
   installModes:
   - supported: false
