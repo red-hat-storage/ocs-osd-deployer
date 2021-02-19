@@ -45,7 +45,7 @@ var _ = Describe("ManagedOCS controller", func() {
 	}
 
 	Context("reconcile()", func() {
-		When("There is no addonParam secret in the cluster", func() {
+		When("There is no add-on parameters secret in the cluster", func() {
 			It("should not create a new storage cluster", func() {
 				ctx := context.Background()
 
@@ -72,9 +72,6 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
-				defer func() {
-					Expect(k8sClient.Delete(context.Background(), managedOCS)).Should(Succeed())
-				}()
 				// No storage cluster should be created
 				scList = &ocsv1.StorageClusterList{}
 
@@ -83,7 +80,7 @@ var _ = Describe("ManagedOCS controller", func() {
 
 			})
 		})
-		When("there is incorrect data in the secret", func() {
+		When("there is incorrect data in the add-on parameters secret", func() {
 			It("should not create a new storage cluster", func() {
 				ctx := context.Background()
 
@@ -111,11 +108,9 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				defer func() {
-					Expect(k8sClient.Delete(context.Background(), managedOCS)).Should(Succeed())
 					Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
 				}()
 
@@ -155,7 +150,6 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				sc := &ocsv1.StorageCluster{
