@@ -8,6 +8,14 @@ metadata:
   namespace: system
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - ocs.openshift.io
   resources:
   - managedocs

@@ -40,7 +40,8 @@ import (
 )
 
 const (
-	namespaceEnvVar = "NAMESPACE"
+	namespaceEnvVarName = "NAMESPACE"
+	addonNameEnvVarName = "ADDON_NAME"
 )
 
 var (
@@ -68,9 +69,9 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	namespace, err := getNamespace()
+	envVars, err := readEnvVars()
 	if err != nil {
-		setupLog.Error(err, "unable to get namespace name")
+		setupLog.Error(err, "Failed to get environment variables")
 		os.Exit(1)
 	}
 
@@ -80,50 +81,59 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "e0c63ac0.openshift.io",
-		Namespace:          namespace,
+		Namespace:          envVars[namespaceEnvVarName],
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "Unable to start manager")
 		os.Exit(1)
 	}
 
 	if err = (&controllers.ManagedOCSReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme: mgr.GetScheme(),
+		Client:               mgr.GetClient(),
+		Log:                  ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:               mgr.GetScheme(),
+		AddonParamSecretName: fmt.Sprintf("addon-%v-parameters", envVars[addonNameEnvVarName]),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ManagedOCS")
+		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err := ensureManagedOCS(mgr.GetClient(), setupLog, namespace); err != nil {
+	if err := ensureManagedOCS(mgr.GetClient(), setupLog, envVars); err != nil {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "Problem running manager")
 		os.Exit(1)
 	}
 }
 
-// getWatchNamespace returns the Namespace the operator should be watching for changes
-func getNamespace() (string, error) {
+func readEnvVars() (map[string]string, error) {
+	envVars := map[string]string{}
 
-	ns, found := os.LookupEnv(namespaceEnvVar)
+	val, found := os.LookupEnv(namespaceEnvVarName)
 	if !found {
-		err := fmt.Errorf("%s must be set", namespaceEnvVar)
-		return "", err
+		return nil, fmt.Errorf("%s environment variable must be set", namespaceEnvVarName)
+
 	}
-	return ns, nil
+	envVars[namespaceEnvVarName] = val
+
+	val, found = os.LookupEnv(addonNameEnvVarName)
+	if !found {
+		return nil, fmt.Errorf("%s environment variable must be set", addonNameEnvVarName)
+	}
+	envVars[addonNameEnvVarName] = val
+
+	return envVars, nil
 }
 
-func ensureManagedOCS(c client.Client, log logr.Logger, namespace string) error {
+func ensureManagedOCS(c client.Client, log logr.Logger, envVars map[string]string) error {
 	err := c.Create(context.Background(), &v1.ManagedOCS{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "managedocs",
-			Namespace: namespace,
+			Namespace: envVars[namespaceEnvVarName],
 		},
 	})
 	if err == nil {
@@ -135,7 +145,7 @@ func ensureManagedOCS(c client.Client, log logr.Logger, namespace string) error 
 		return nil
 
 	} else {
-		log.Error(err, "unable to create ManagedOCS resource")
+		log.Error(err, "Unable to create ManagedOCS resource")
 		return err
 	}
 }
