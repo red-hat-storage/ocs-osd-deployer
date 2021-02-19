@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,13 +45,109 @@ var _ = Describe("ManagedOCS controller", func() {
 	}
 
 	Context("reconcile()", func() {
-		When("there is no storage clsuter resource in the cluster", func() {
+		When("There is no addonParam secret in the cluster", func() {
+			It("should not create a new storage cluster", func() {
+				ctx := context.Background()
+
+				scList := &ocsv1.StorageClusterList{}
+
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+
+				// addon param secret does not exist
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(
+					WithTransform(errors.IsNotFound, BeTrue()))
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+
+				defer func() {
+					Expect(k8sClient.Delete(context.Background(), managedOCS)).Should(Succeed())
+				}()
+				// No storage cluster should be created
+				scList = &ocsv1.StorageClusterList{}
+
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+
+			})
+		})
+		When("there is incorrect data in the secret", func() {
+			It("should not create a new storage cluster", func() {
+				ctx := context.Background()
+
+				scList := &ocsv1.StorageClusterList{}
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+
+				// Create the secret
+				data := make(map[string][]byte)
+				data["size"] = []byte("AA")
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: data,
+				}
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+
+				defer func() {
+					Expect(k8sClient.Delete(context.Background(), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
+				}()
+
+				// No storage cluster should be created
+				scList = &ocsv1.StorageClusterList{}
+
+				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
+				Expect(scList.Items).Should(HaveLen(0))
+			})
+		})
+
+		When("there is no storage cluster resource in the cluster", func() {
 			It("should create a new storage cluster", func() {
 				ctx := context.Background()
 
 				scList := &ocsv1.StorageClusterList{}
 				Expect(k8sClient.List(ctx, scList, client.InNamespace(TestNamespace))).Should(Succeed())
 				Expect(scList.Items).Should(HaveLen(0))
+
+				// Create the secret
+				data := make(map[string][]byte)
+				data["size"] = []byte("2")
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: data,
+				}
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
 
 				managedOCS := &v1.ManagedOCS{
 					ObjectMeta: metav1.ObjectMeta{

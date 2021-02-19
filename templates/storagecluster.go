@@ -59,7 +59,7 @@ spec:
         memory: 2Gi
   storageDeviceSets:
     - name: mydeviceset
-      count: 3 
+      count: 1
       dataPVCTemplate:
         spec:
           storageClassName: gp2
@@ -68,9 +68,10 @@ spec:
           volumeMode: Block
           resources:
             requests:
-              storage: 1000Gi
+              storage: 1Ti
       placement: {}
       portable: true
+      replica: 3
       resources:
         limits:
           cpu: 2000m
