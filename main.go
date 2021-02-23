@@ -36,6 +36,7 @@ import (
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	"github.com/openshift/ocs-osd-deployer/controllers"
+	"github.com/openshift/ocs-osd-deployer/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -74,6 +75,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Starting the Readiness Server to be checked by the readiness probe.
+	rdySrvr := utils.NewReadinessServer(ctrl.Log.WithName("Readiness Server"))
+	go rdySrvr.StartReadinessServer()
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
@@ -88,9 +93,10 @@ func main() {
 	}
 
 	if err = (&controllers.ManagedOCSReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:  mgr.GetScheme(),
+		RdySrvr: rdySrvr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)

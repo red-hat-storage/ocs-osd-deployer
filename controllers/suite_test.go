@@ -33,6 +33,7 @@ import (
 
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	"github.com/openshift/ocs-osd-deployer/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -80,10 +81,15 @@ var _ = BeforeSuite(func(done Done) {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
+	// Starting the Readiness Server to be checked by the readiness probe.
+	rdySrvr := utils.NewReadinessServer(ctrl.Log.WithName("Readiness Server"))
+	go rdySrvr.StartReadinessServer()
+
 	err = (&ManagedOCSReconciler{
-		Client: k8sManager.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme: scheme.Scheme,
+		Client:  k8sManager.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:  scheme.Scheme,
+		RdySrvr: rdySrvr,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

@@ -31,6 +31,7 @@ import (
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	"github.com/openshift/ocs-osd-deployer/templates"
 	"github.com/openshift/ocs-osd-deployer/utils"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -40,9 +41,10 @@ const (
 // ManagedOCSReconciler reconciles a ManagedOCS object
 type ManagedOCSReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-	ctx    context.Context
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
+	RdySrvr *utils.ReadinessServer
+	ctx     context.Context
 
 	managedOCS *v1.ManagedOCS
 }
@@ -79,11 +81,16 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	// Ensure status is updated once even on failed reconciles
 	statusErr := r.Status().Update(r.ctx, r.managedOCS)
 
+	// Update readiness
+	readyErr := r.updateReadiness(req)
+
 	// Reconcile errors have priority to status update errors
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if statusErr != nil {
 		return ctrl.Result{}, statusErr
+	} else if readyErr != nil {
+		return ctrl.Result{}, readyErr
 	} else {
 		return ctrl.Result{}, nil
 	}
@@ -132,6 +139,38 @@ func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 		// Override storage cluster spec with desired spec from the template.
 		// We do not replace meta or status on purpose
 		sc.Spec = desired.Spec
+	}
+
+	return nil
+}
+
+func (r *ManagedOCSReconciler) updateReadiness(req ctrl.Request) error {
+	var storageCluster ocsv1.StorageCluster
+
+	// Update managed-ocs readiness status based on the state of the StorageCluster
+	scNamespaceName := types.NamespacedName{
+		Name:      storageClusterName,
+		Namespace: req.Namespace,
+	}
+
+	if err := r.Get(r.ctx, scNamespaceName, &storageCluster); err != nil {
+		r.Log.Error(err, "error getting StorageCluster")
+		return err
+	}
+
+	// I can't import this:
+	// statusutil "github.com/openshift/ocs-operator/controllers/util"
+	// If I could, then we could use OCS's phase definitions instead of a
+	// hard-coded value:
+	// github.com/openshift/ocs-osd-deployer/controllers imports
+	//        github.com/openshift/ocs-operator/controllers/util: module github.com/openshift/ocs-operator@latest found (v0.0.1-alpha1), but does not contain package github.com/openshift/ocs-operator/controllers/util
+	// Will create PR in ocs operator to make the phase definitions a part of
+	// pkg/apis/ocs/v1
+	//if storageCluster.Status.Phase != statusutil.PhaseReady {
+	if storageCluster.Status.Phase == "Ready" {
+		r.RdySrvr.SetReady()
+	} else {
+		r.RdySrvr.UnsetReady("StorageCluster not ready.")
 	}
 
 	return nil

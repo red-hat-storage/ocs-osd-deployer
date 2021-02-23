@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"reflect"
 	"time"
 
@@ -9,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	"github.com/openshift/ocs-osd-deployer/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,8 +47,27 @@ var _ = Describe("ManagedOCS controller", func() {
 		return key
 	}
 
+	readinessProbe := func() (bool, string) {
+		resp, err := http.Get(fmt.Sprintf("http://localhost%s/readyz", utils.PortStr))
+
+		if err != nil {
+			fmt.Println(err)
+			return false, ""
+		}
+
+		defer resp.Body.Close()
+
+		// Any code greater than 200 and less than 400 is considered success.
+		ready := (resp.StatusCode > 200 && resp.StatusCode < 400)
+
+		// For testing purposes, the last updated time was put in the body.
+		lastUpdated, _ := ioutil.ReadAll(resp.Body)
+
+		return ready, string(lastUpdated)
+	}
+
 	Context("reconcile()", func() {
-		When("there is no storage clsuter resource in the cluster", func() {
+		When("there is no storage cluster resource in the cluster", func() {
 			It("should create a new storage cluster", func() {
 				ctx := context.Background()
 
@@ -69,10 +92,14 @@ var _ = Describe("ManagedOCS controller", func() {
 				}
 				waitForResource(ctx, sc)
 			})
+			It("should have its readiness probe report \"not ready\"", func() {
+				rdy, _ := readinessProbe()
+				Expect(rdy).Should(BeFalse())
+			})
 		})
 
 		When("the storage cluster is deleted", func() {
-			It("Should create a new storage cluster in the namespace", func() {
+			It("should create a new storage cluster in the namespace", func() {
 				ctx := context.Background()
 				sc := &ocsv1.StorageCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -90,10 +117,15 @@ var _ = Describe("ManagedOCS controller", func() {
 				// Wait for the storage cluster to be re created
 				waitForResource(ctx, sc)
 			})
+
+			It("should have its readiness probe report \"not ready\"", func() {
+				rdy, _ := readinessProbe()
+				Expect(rdy).Should(BeFalse())
+			})
 		})
 
-		When("the storage cluster is modfied while in strict mode", func() {
-			It("should revert the changes and bring the storage clsuter back to its managed state", func() {
+		When("the storage cluster is modified while in strict mode", func() {
+			It("should revert the changes and bring the storage cluster back to its managed state", func() {
 				ctx := context.Background()
 
 				// Verify strict mode
@@ -129,6 +161,11 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Verify that the storage cluster was reverted to its original state
 				Expect(reflect.DeepEqual(sc.Spec, *spec)).Should(BeTrue())
+			})
+
+			It("should have its readiness probe report \"not ready\"", func() {
+				rdy, _ := readinessProbe()
+				Expect(rdy).Should(BeFalse())
 			})
 		})
 
@@ -169,6 +206,12 @@ var _ = Describe("ManagedOCS controller", func() {
 					err := k8sClient.Get(ctx, scKey, sc)
 					return err == nil && reflect.DeepEqual(sc.Spec, defaults)
 				}, duration, interval).Should(BeTrue())
+			})
+		})
+
+		When("the storage cluster becomes ready", func() {
+			It("should cause the managed-ocs to report that it is ready", func() {
+				// TODO
 			})
 		})
 	})

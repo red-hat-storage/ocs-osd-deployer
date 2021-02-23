@@ -88,6 +88,12 @@ spec:
                       fieldPath: metadata.namespace
                 image: ocs-osd-deployer:latest
                 name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
                 resources:
                   limits:
                     cpu: 100m
