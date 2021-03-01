@@ -11,4 +11,3 @@ spec:
   image: docker.io/ohadmitrani/ocs-registry:4.7.0
   publisher: Red Hat
   sourceType: grpc
-  

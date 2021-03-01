@@ -48,6 +48,20 @@ spec:
             properties:
               components:
                 properties:
+                  alertmanager:
+                    properties:
+                      state:
+                        type: string
+                    required:
+                    - state
+                    type: object
+                  prometheus:
+                    properties:
+                      state:
+                        type: string
+                    required:
+                    - state
+                    type: object
                   storageCluster:
                     properties:
                       state:
@@ -56,6 +70,8 @@ spec:
                     - state
                     type: object
                 required:
+                - alertmanager
+                - prometheus
                 - storageCluster
                 type: object
               reconcileStrategy:

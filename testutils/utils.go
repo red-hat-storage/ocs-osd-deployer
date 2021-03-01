@@ -6,6 +6,7 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,10 +26,22 @@ func EnsureNoResource(k8sClient client.Client, ctx context.Context, obj runtime.
 	key, err := client.ObjectKeyFromObject(obj)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 
-	EventuallyWithOffset(1, func() bool {
-		err := k8sClient.Get(ctx, key, obj)
-		return err == nil
-	}, timeout, interval).Should(BeFalse())
+	ConsistentlyWithOffset(1, func() bool {
+		return errors.IsNotFound((k8sClient.Get(ctx, key, obj)))
+	}, timeout, interval).Should(BeTrue())
+}
+
+func EnsureNoResources(k8sClient client.Client, ctx context.Context, list []runtime.Object, timeout time.Duration, interval time.Duration) {
+	ConsistentlyWithOffset(1, func() bool {
+		for i := range list {
+			key, err := client.ObjectKeyFromObject(list[i])
+			ExpectWithOffset(2, err).ToNot(HaveOccurred())
+			if !errors.IsNotFound(k8sClient.Get(ctx, key, list[i])) {
+				return false
+			}
+		}
+		return true
+	}, timeout, interval).Should(BeTrue())
 }
 
 func GetResourceKey(obj runtime.Object) client.ObjectKey {
@@ -37,22 +50,23 @@ func GetResourceKey(obj runtime.Object) client.ObjectKey {
 	return key
 }
 
+func ResourceHasLabel(k8sClient client.Client, ctx context.Context, obj runtime.Object, labelKey string, labelValue string) bool {
+	accessor, err := meta.Accessor(obj)
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+
+	key := client.ObjectKey{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		return false
+	}
+
+	value, ok := accessor.GetLabels()[labelKey]
+	return ok && value == labelValue
+}
+
 func ProbeReadiness() (int, error) {
 	resp, err := http.Get("http://localhost:8081/readyz")
 	if err != nil {
 		return 0, err
 	}
 	return resp.StatusCode, nil
-}
-
-func WaitForResourceSpecToUpdate(k8sClient client.Client, ctx context.Context, obj runtime.Object, timeout time.Duration, interval time.Duration) {
-	accessor, err := meta.Accessor(obj)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
-
-	key := client.ObjectKey{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}
-	scGen := accessor.GetGeneration()
-	EventuallyWithOffset(1, func() bool {
-		err := k8sClient.Get(ctx, key, obj)
-		return err == nil && accessor.GetGeneration() > scGen
-	}, timeout, interval).Should(BeTrue())
 }

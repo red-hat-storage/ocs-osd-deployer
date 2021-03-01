@@ -21,6 +21,9 @@ bundle
 
 !vendor/**/zz_generated.*
 
+# Ignore local deployer image changes
+config/manager/kustomization.yaml
+
 # editor and IDE paraphernalia
 .idea
 *.swp

@@ -17,11 +17,13 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,9 +33,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
-	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -45,11 +48,13 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 
 const (
-	TestAddOnParamsSecretName   = "test-secret"
-	TestDeleteConfigMapName     = "test-configmap"
-	TestDeleteConfigMapLabelKey = "test-configmap-label-key"
-	TestAddonSubscriptionName   = "test-subscription"
-	TestdeployerCsvName         = "ocs-osd-deployer.v0.0.1"
+	testPrimaryNamespace             = "primary"
+	testSecondaryNamespace           = "secondary"
+	testAddonParamsSecretName        = "test-addon-secret"
+	testAddonConfigMapName           = "test-addon-configmap"
+	testAddonConfigMapDeleteLabelKey = "test-addon-configmap-delete-label-key"
+	testSubscriptionName             = "test-subscription"
+	testDeployerCSVName              = "ocs-osd-deployer.x.y.z"
 )
 
 func TestAPIs(t *testing.T) {
@@ -79,10 +84,13 @@ var _ = BeforeSuite(func(done Done) {
 	err = ocsv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = promv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = v1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = operators.AddToScheme(scheme.Scheme)
+	err = opv1a1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
@@ -93,14 +101,14 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&ManagedOCSReconciler{
-		Client:                  k8sManager.GetClient(),
-		UnrestrictedClient:      k8sManager.GetClient(),
-		Log:                     ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:                  scheme.Scheme,
-		AddonParamSecretName:    TestAddOnParamsSecretName,
-		DeleteConfigMapName:     TestDeleteConfigMapName,
-		DeleteConfigMapLabelKey: TestDeleteConfigMapLabelKey,
-		AddonSubscriptionName:   TestAddonSubscriptionName,
+		Client:                       k8sManager.GetClient(),
+		UnrestrictedClient:           k8sManager.GetClient(),
+		Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                       scheme.Scheme,
+		AddonParamSecretName:         testAddonParamsSecretName,
+		AddonConfigMapName:           testAddonConfigMapName,
+		AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
+		DeployerSubscriptionName:     testSubscriptionName,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -113,6 +121,39 @@ var _ = BeforeSuite(func(done Done) {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClient).ToNot(BeNil())
+
+	ctx := context.Background()
+
+	// Create the primary namespace to be used by some of the tests
+	primaryNS := &corev1.Namespace{}
+	primaryNS.Name = testPrimaryNamespace
+	Expect(k8sClient.Create(ctx, primaryNS)).Should(Succeed())
+
+	// Create a secondary namespace to be used by some of the tests
+	secondaryNS := &corev1.Namespace{}
+	secondaryNS.Name = testSecondaryNamespace
+	Expect(k8sClient.Create(ctx, secondaryNS)).Should(Succeed())
+
+	// Create a mock subscription
+	deployerSub := &opv1a1.Subscription{}
+	deployerSub.Name = testSubscriptionName
+	deployerSub.Namespace = testPrimaryNamespace
+	deployerSub.Spec = &opv1a1.SubscriptionSpec{}
+	Expect(k8sClient.Create(ctx, deployerSub)).ShouldNot(HaveOccurred())
+
+	// create a mock deplyer CSV
+	deployerCSV := &opv1a1.ClusterServiceVersion{}
+	deployerCSV.Name = testDeployerCSVName
+	deployerCSV.Namespace = testPrimaryNamespace
+	deployerCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+	deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{}
+	Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
+
+	// Create the ManagedOCS resource
+	managedOCS := &v1.ManagedOCS{}
+	managedOCS.Name = managedOCSName
+	managedOCS.Namespace = testPrimaryNamespace
+	Expect(k8sClient.Create(ctx, managedOCS)).ShouldNot(HaveOccurred())
 
 	close(done)
 }, 60)

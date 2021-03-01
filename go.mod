@@ -3,6 +3,7 @@ module github.com/openshift/ocs-osd-deployer
 go 1.15
 
 require (
+	github.com/coreos/prometheus-operator v0.38.0
 	github.com/go-logr/logr v0.3.0
 	github.com/go-logr/zapr v0.2.0 // indirect
 	github.com/onsi/ginkgo v1.12.1
