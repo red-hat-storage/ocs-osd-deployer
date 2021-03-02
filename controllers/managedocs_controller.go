@@ -61,7 +61,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // Reconcile TODO
-func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, err error) {
 	log := r.Log.WithValues("req.Namespace", req.Namespace, "req.Name", req.Name)
 	log.Info("Reconciling ManagedOCS")
 
@@ -73,20 +73,23 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		return ctrl.Result{}, err
 	}
 
+	// Ensure status is always updated once even on failed reconciles
+	// This is garaunteed to run after Reconcile returns but before going back to
+	// the function that called it. Because of this, we can modify the error
+	// return value as needed.
+	defer (func() {
+		statusErr := r.Status().Update(r.ctx, r.managedOCS)
+
+		// Reconcile errors have priority to status update errors
+		if err == nil && statusErr != nil {
+			err = statusErr
+		}
+	})()
+
 	// Run the reconcile phases
-	err := r.reconcilePhases(req)
+	err = r.reconcilePhases(req)
 
-	// Ensure status is updated once even on failed reconciles
-	statusErr := r.Status().Update(r.ctx, r.managedOCS)
-
-	// Reconcile errors have priority to status update errors
-	if err != nil {
-		return ctrl.Result{}, err
-	} else if statusErr != nil {
-		return ctrl.Result{}, statusErr
-	} else {
-		return ctrl.Result{}, nil
-	}
+	return ctrl.Result{}, err
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases(req ctrl.Request) error {

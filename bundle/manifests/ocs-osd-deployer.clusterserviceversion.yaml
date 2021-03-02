@@ -9,9 +9,6 @@ metadata:
           "kind": "ManagedOCS",
           "metadata": {
             "name": "managedocs-sample"
-          },
-          "spec": {
-            "foo": "bar"
           }
         }
       ]
