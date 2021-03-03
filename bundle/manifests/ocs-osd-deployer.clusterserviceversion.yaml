@@ -9,14 +9,11 @@ metadata:
           "kind": "ManagedOCS",
           "metadata": {
             "name": "managedocs-sample"
-          },
-          "spec": {
-            "foo": "bar"
           }
         }
       ]
     capabilities: Basic Install
-    operators.operatorframework.io/builder: operator-sdk-v1.2.0
+    operators.operatorframework.io/builder: operator-sdk-v1.3.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
   name: ocs-osd-deployer.v0.0.1
   namespace: placeholder

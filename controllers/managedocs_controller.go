@@ -23,8 +23,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	controller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/go-logr/logr"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
@@ -54,8 +56,16 @@ type ManagedOCSReconciler struct {
 
 // SetupWithManager TODO
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctrlOptions := controller.Options{
+		MaxConcurrentReconciles: 1,
+	}
+	managedOCSPredicates := builder.WithPredicates(
+		predicate.GenerationChangedPredicate{},
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.ManagedOCS{}).
+		WithOptions(ctrlOptions).
+		For(&v1.ManagedOCS{}, managedOCSPredicates).
 		Owns(&ocsv1.StorageCluster{}).
 		Complete(r)
 }
@@ -104,7 +114,7 @@ func (r *ManagedOCSReconciler) reconcilePhases(req ctrl.Request) error {
 			Namespace: req.Namespace,
 		},
 	}
-	if _, err := ctrlutil.CreateOrUpdate(r.ctx, r, storageCluster, func() error {
+	if _, err := ctrl.CreateOrUpdate(r.ctx, r, storageCluster, func() error {
 		return r.setDesiredStorageCluster(reconcileStrategy, storageCluster)
 	}); err != nil {
 		return err
@@ -120,7 +130,7 @@ func (r *ManagedOCSReconciler) setDesiredStorageCluster(
 	r.Log.Info("Reconciling storagecluster", "ReconcileStrategy", reconcileStrategy)
 
 	// Ensure ownership on the storage cluster CR
-	if err := ctrlutil.SetControllerReference(r.managedOCS, sc, r.Scheme); err != nil {
+	if err := ctrl.SetControllerReference(r.managedOCS, sc, r.Scheme); err != nil {
 		return err
 	}
 
