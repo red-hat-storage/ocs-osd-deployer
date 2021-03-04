@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -132,6 +133,9 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() error {
+	// Update the status of the components
+	r.managedOCS.Status.Components = r.updateComponents()
+
 	// Set the effective reconcile strategy
 	reconcileStrategy := v1.ReconcileStrategyStrict
 	if strings.EqualFold(string(r.managedOCS.Spec.ReconcileStrategy), string(v1.ReconcileStrategyNone)) {
@@ -222,4 +226,32 @@ func (r *ManagedOCSReconciler) setStorageClusterParamsFromSecret(sc *ocsv1.Stora
 
 	sc.Spec.StorageDeviceSets[0].Count = sdsCount
 	return nil
+}
+
+func (r *ManagedOCSReconciler) updateComponents() v1.ComponentStatusMap {
+	var components v1.ComponentStatusMap
+
+	// Checking the StorageCluster component.
+	var sc ocsv1.StorageCluster
+
+	scNamespacedName := types.NamespacedName{
+		Name:      storageClusterName,
+		Namespace: r.namespace,
+	}
+
+	err := r.Get(r.ctx, scNamespacedName, &sc)
+	if err == nil {
+		if sc.Status.Phase == "Ready" {
+			components.StorageCluster.State = v1.ComponentReady
+		} else {
+			components.StorageCluster.State = v1.ComponentPending
+		}
+	} else if errors.IsNotFound(err) {
+		components.StorageCluster.State = v1.ComponentNotFound
+	} else {
+		r.Log.Error(err, "error getting StorageCluster, setting compoment status to Unknown")
+		components.StorageCluster.State = v1.ComponentUnknown
+	}
+
+	return components
 }
