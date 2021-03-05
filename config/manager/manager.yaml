@@ -42,5 +42,27 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: ADDON_NAME
+      - name: readiness-server
+        command:
+        - /readinessServer
+        image: controller:latest
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 10m
+            memory: 2Mi
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
       terminationGracePeriodSeconds: 10
       serviceAccountName: deployer
