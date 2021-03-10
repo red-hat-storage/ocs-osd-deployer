@@ -25,6 +25,10 @@ endif
 
 all: manager
 
+export_env_vars:
+export NAMESPACE = openshift-storage
+export ADDON_NAME = ocs-converged
+
 # Run tests
 ENVTEST_ASSETS_DIR = $(shell pwd)/testbin
 test: generate fmt vet manifests
@@ -37,16 +41,20 @@ manager: generate fmt vet
 	go build -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
+run: generate fmt vet manifests export_env_vars
+	kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create secret generic addon-${ADDON_NAME}-parameters -n ${NAMESPACE} --from-literal size=1 --dry-run=client -oyaml | kubectl apply -f -
 	go run ./main.go
 
 # Install CRDs into a cluster
 install: manifests kustomize
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+	./shim/shim.sh install
 
 # Uninstall CRDs from a cluster
 uninstall: manifests kustomize
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+	./shim/shim.sh uninstall
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests kustomize
