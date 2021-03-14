@@ -8,6 +8,9 @@
 bin
 ocs-osd-deployer
 
+# Generated bundle and manifests
+bundle
+
 # Test binary, build with `go test -c`
 *.test
 
