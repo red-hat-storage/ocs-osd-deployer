@@ -9,10 +9,10 @@ import (
 	. "github.com/onsi/gomega"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	utils "github.com/openshift/ocs-osd-deployer/testutils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,32 +26,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		duration = time.Second * 10
 		interval = time.Millisecond * 250
 	)
-
-	waitForResource := func(ctx context.Context, obj runtime.Object) {
-		key, err := client.ObjectKeyFromObject(obj)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-
-		EventuallyWithOffset(1, func() bool {
-			err := k8sClient.Get(ctx, key, obj)
-			return err == nil
-		}, timeout, interval).Should(BeTrue())
-	}
-
-	ensureNoResource := func(ctx context.Context, obj runtime.Object) {
-		key, err := client.ObjectKeyFromObject(obj)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-
-		EventuallyWithOffset(1, func() bool {
-			err := k8sClient.Get(ctx, key, obj)
-			return err == nil
-		}, timeout, interval).Should(BeFalse())
-	}
-
-	getResourceKey := func(obj runtime.Object) client.ObjectKey {
-		key, err := client.ObjectKeyFromObject(obj)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		return key
-	}
 
 	Context("reconcile()", func() {
 		When("there is no add-on parameters secret in the cluster", func() {
@@ -69,7 +43,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
 					WithTransform(errors.IsNotFound, BeTrue()))
 				managedOCS := &v1.ManagedOCS{
 					ObjectMeta: metav1.ObjectMeta{
@@ -78,7 +52,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
-				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				sc := &ocsv1.StorageCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -86,7 +60,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				ensureNoResource(ctx, sc)
+				utils.EnsureNoResource(k8sClient, ctx, sc, timeout, interval)
 			})
 		})
 		When("there is incorrect data in the add-on parameters secret", func() {
@@ -108,7 +82,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(Succeed())
 
 				managedOCS := &v1.ManagedOCS{
 					ObjectMeta: metav1.ObjectMeta{
@@ -116,7 +90,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				// No storage cluster should be created
 				sc := &ocsv1.StorageCluster{
@@ -125,7 +99,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				ensureNoResource(ctx, sc)
+				utils.EnsureNoResource(k8sClient, ctx, sc, timeout, interval)
 
 				// Remove the secret for future cases
 				Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
@@ -151,7 +125,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-				Expect(k8sClient.Get(ctx, getResourceKey(secret), secret)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(Succeed())
 
 				managedOCS := &v1.ManagedOCS{
 					ObjectMeta: metav1.ObjectMeta{
@@ -159,7 +133,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				sc := &ocsv1.StorageCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -167,7 +141,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				waitForResource(ctx, sc)
+				utils.WaitForResource(k8sClient, ctx, sc, timeout, interval)
 			})
 		})
 
@@ -182,7 +156,7 @@ var _ = Describe("ManagedOCS controller", func() {
 
 			BeforeEach(func() {
 				// This test, like the ones below it, assume managed-ocs is already created.
-				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				// Ensure that the storage cluster is not ready
 				// This test, like the ones below it, assume a StorageCluster is already created.
@@ -192,7 +166,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(&sc), &sc)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(&sc), &sc)).Should(Succeed())
 
 				// Updating the Status of the StorageCluster should trigger a reconcile
 				// for managed-ocs
@@ -200,9 +174,10 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Status().Update(ctx, &sc)).Should(Succeed())
 			})
 
-			It("should reflect the sc status in the managed-ocs cr", func() {
+			It("should update its installation status", func() {
+				By("reflecting the sc status in the managed-ocs cr")
 				Eventually(func() v1.ComponentState {
-					Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 					return managedOCS.Status.Components.StorageCluster.State
 				}, timeout, interval).Should(Equal(v1.ComponentPending))
 			})
@@ -219,7 +194,7 @@ var _ = Describe("ManagedOCS controller", func() {
 
 			BeforeEach(func() {
 				// This test, like the ones below it, assume managed-ocs is already created.
-				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 
 				// Ensure that the storage cluster is not ready
 				// This test, like the ones below it, assume a StorageCluster is already created.
@@ -229,7 +204,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(&sc), &sc)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(&sc), &sc)).Should(Succeed())
 
 				// Updating the Status of the StorageCluster should trigger a reconcile
 				// for managed-ocs
@@ -237,9 +212,10 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Status().Update(ctx, &sc)).Should(Succeed())
 			})
 
-			It("should reflect the sc status in the managed-ocs cr", func() {
+			It("should update its installation status", func() {
+				By("reflecting the sc status in the managed-ocs cr")
 				Eventually(func() v1.ComponentState {
-					Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 					return managedOCS.Status.Components.StorageCluster.State
 				}, timeout, interval).Should(Equal(v1.ComponentReady))
 			})
@@ -254,16 +230,16 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(sc), sc)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
 
 				// Delete the strorage cluster
 				Expect(k8sClient.Delete(ctx, sc)).Should(Succeed())
 				// Race condition: this needs to occur before reconciliation loop runs.
-				Expect(k8sClient.Get(ctx, getResourceKey(sc), sc)).Should(
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(
 					WithTransform(errors.IsNotFound, BeTrue()))
 
 				// Wait for the storage cluster to be re created
-				waitForResource(ctx, sc)
+				utils.WaitForResource(k8sClient, ctx, sc, timeout, interval)
 			})
 		})
 
@@ -278,7 +254,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				Expect(k8sClient.Get(ctx, getResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 				Expect(managedOCS.Status.ReconcileStrategy == v1.ReconcileStrategyStrict).Should(BeTrue())
 
 				sc := &ocsv1.StorageCluster{
@@ -287,7 +263,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				scKey := getResourceKey(sc)
+				scKey := utils.GetResourceKey(sc)
 				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
 
 				// Modify the storagecluster spec
@@ -317,7 +293,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				managedOCSKey := getResourceKey(managedOCS)
+				managedOCSKey := utils.GetResourceKey(managedOCS)
 				Expect(k8sClient.Get(ctx, managedOCSKey, managedOCS)).Should(Succeed())
 
 				// Change the reconcile strategy to none
@@ -334,7 +310,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						Namespace: TestNamespace,
 					},
 				}
-				scKey := getResourceKey(sc)
+				scKey := utils.GetResourceKey(sc)
 				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
 
 				defaults := ocsv1.StorageClusterSpec{}
