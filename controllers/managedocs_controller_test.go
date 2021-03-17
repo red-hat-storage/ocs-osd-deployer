@@ -10,8 +10,11 @@ import (
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	utils "github.com/openshift/ocs-osd-deployer/testutils"
+	ctrlUtils "github.com/openshift/ocs-osd-deployer/utils"
+	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -19,8 +22,9 @@ import (
 var _ = Describe("ManagedOCS controller", func() {
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
-		ManagedOCSName = "test-managedocs"
-		TestNamespace  = "default"
+		ManagedOCSName     = "managedocs"
+		TestNamespace      = "default"
+		SecondaryNamespace = "second"
 
 		timeout  = time.Second * 10
 		duration = time.Second * 10
@@ -320,6 +324,225 @@ var _ = Describe("ManagedOCS controller", func() {
 					err := k8sClient.Get(ctx, scKey, sc)
 					return err == nil && reflect.DeepEqual(sc.Spec, defaults)
 				}, duration, interval).Should(BeTrue())
+			})
+		})
+
+		When("there is an add-on delete comfigmap", func() {
+			ctx := context.Background()
+
+			managedOCS := &v1.ManagedOCS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ManagedOCSName,
+					Namespace: TestNamespace,
+				},
+			}
+			sc := &ocsv1.StorageCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      storageClusterName,
+					Namespace: TestNamespace,
+				},
+			}
+
+			It("should not remove ocs resources if there is no deletion label", func() {
+
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+				sc.Status.Phase = "Ready"
+				Expect(k8sClient.Status().Update(ctx, sc)).Should(Succeed())
+
+				// Create the configmap
+				cm := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestDeleteConfigMapName,
+						Namespace: TestNamespace,
+					},
+				}
+				Expect(k8sClient.Create(ctx, cm)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(cm), cm)).Should(Succeed())
+
+				// wait to trigger the reconcile logic
+				time.Sleep(time.Second * 3)
+
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+
+				// Remove the configmap for future cases
+				Expect(k8sClient.Delete(ctx, cm)).Should(Succeed())
+			})
+			It("should not remove ocs resources if the configmap with incorrect deletion label", func() {
+
+				// Create the configmap
+				cm := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestDeleteConfigMapName,
+						Namespace: TestNamespace,
+						Labels: map[string]string{
+							"blah-blah": "true",
+						},
+					},
+				}
+
+				Expect(k8sClient.Create(ctx, cm)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(cm), cm)).Should(Succeed())
+
+				// wait to trigger the reconcile logic
+				time.Sleep(time.Second * 3)
+
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+
+				// Remove the configmap for future cases
+				Expect(k8sClient.Delete(ctx, cm)).Should(Succeed())
+			})
+
+			When("there is an add-on delete configmap with correct deletion label", func() {
+				storageClassRbdName := "ocs-storagecluster-ceph-rbd"
+				storageClassCephFsName := "ocs-storagecluster-cephfs"
+
+				pvc1 := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pvc1",
+						Namespace: TestNamespace,
+					},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("1Gi"),
+							},
+						},
+						StorageClassName: &storageClassRbdName,
+					},
+				}
+				pvc2 := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pvc2",
+						Namespace: SecondaryNamespace,
+					},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("1Gi"),
+							},
+						},
+						StorageClassName: &storageClassCephFsName,
+					},
+				}
+				sub := &operators.Subscription{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddonSubscriptionName,
+						Namespace: TestNamespace,
+					},
+					Spec: &operators.SubscriptionSpec{},
+				}
+				csv := &operators.ClusterServiceVersion{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestdeployerCsvName,
+						Namespace: TestNamespace,
+					},
+					Spec: operators.ClusterServiceVersionSpec{
+						InstallStrategy: operators.NamedInstallStrategy{
+							StrategyName: "test-strategy",
+							StrategySpec: operators.StrategyDetailsDeployment{
+								DeploymentSpecs: []operators.StrategyDeploymentSpec{},
+							},
+						},
+					},
+				}
+				It("should not remove ocs resources if the components are not ready", func() {
+
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+					sc.Status.Phase = "Pending"
+					Expect(k8sClient.Status().Update(ctx, sc)).Should(Succeed())
+
+					// Create the configmap
+					cm := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      TestDeleteConfigMapName,
+							Namespace: TestNamespace,
+							Labels: map[string]string{
+								TestDeleteConfigMapLabelKey: "true",
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, cm)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(cm), cm)).Should(Succeed())
+
+					// wait to trigger the reconcile logic
+					time.Sleep(time.Second * 3)
+
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+				})
+				It("should not remove ocs resources if there are multiple PVCs in use", func() {
+
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+					sc.Status.Phase = "Ready"
+					Expect(k8sClient.Status().Update(ctx, sc)).Should(Succeed())
+
+					Expect(k8sClient.Create(ctx, pvc1)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(pvc1), pvc1)).Should(Succeed())
+
+					// create secondary namespace
+					namespace := &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: SecondaryNamespace,
+						},
+					}
+					Expect(k8sClient.Create(ctx, namespace)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(namespace), namespace)).Should(Succeed())
+
+					// create PVC in secondary namespace
+					Expect(k8sClient.Create(ctx, pvc2)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(pvc2), pvc2)).Should(Succeed())
+
+					// wait to trigger the reconcile logic
+					time.Sleep(time.Second * 3)
+
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+
+				})
+				It("should not remove ocs resources if PVCs are removed except the last one in secondary namespace", func() {
+
+					// remove PVC
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(pvc1), pvc1)).Should(Succeed())
+					pvc1.Finalizers = ctrlUtils.Remove(pvc1.Finalizers, "kubernetes.io/pvc-protection")
+					Expect(k8sClient.Status().Update(ctx, pvc1)).Should(Succeed())
+					Expect(k8sClient.Delete(ctx, pvc1)).Should(Succeed())
+
+					// wait to trigger the reconcile logic
+					time.Sleep(time.Second * 3)
+
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)).Should(Succeed())
+
+				})
+				It("should remove all ocs resources if the last PVC is removed", func() {
+
+					Expect(k8sClient.Create(ctx, sub)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(sub), sub)).Should(Succeed())
+
+					Expect(k8sClient.Create(ctx, csv)).Should(Succeed())
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(csv), csv)).Should(Succeed())
+
+					// remove PVC
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(pvc2), pvc2)).Should(Succeed())
+					pvc2.Finalizers = ctrlUtils.Remove(pvc1.Finalizers, "kubernetes.io/pvc-protection")
+					Expect(k8sClient.Status().Update(ctx, pvc2)).Should(Succeed())
+					Expect(k8sClient.Delete(ctx, pvc2)).Should(Succeed())
+
+					// wait to trigger the reconcile logic
+					time.Sleep(time.Second * 3)
+
+					utils.EnsureNoResource(k8sClient, ctx, managedOCS, timeout, interval)
+
+					utils.EnsureNoResource(k8sClient, ctx, sc, timeout, interval)
+
+					utils.EnsureNoResource(k8sClient, ctx, sub, timeout, interval)
+
+					utils.EnsureNoResource(k8sClient, ctx, csv, timeout, interval)
+				})
 			})
 		})
 	})

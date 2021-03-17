@@ -33,6 +33,7 @@ import (
 
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -43,7 +44,13 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 
-const TestAddOnParamsSecretName = "test-secret"
+const (
+	TestAddOnParamsSecretName   = "test-secret"
+	TestDeleteConfigMapName     = "test-configmap"
+	TestDeleteConfigMapLabelKey = "test-configmap-label-key"
+	TestAddonSubscriptionName   = "test-subscription"
+	TestdeployerCsvName         = "ocs-osd-deployer.v0.0.1"
+)
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -75,6 +82,9 @@ var _ = BeforeSuite(func(done Done) {
 	err = v1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = operators.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -83,10 +93,14 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&ManagedOCSReconciler{
-		Client:               k8sManager.GetClient(),
-		Log:                  ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:               scheme.Scheme,
-		AddonParamSecretName: TestAddOnParamsSecretName,
+		Client:                  k8sManager.GetClient(),
+		UnrestrictedClient:      k8sManager.GetClient(),
+		Log:                     ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                  scheme.Scheme,
+		AddonParamSecretName:    TestAddOnParamsSecretName,
+		DeleteConfigMapName:     TestDeleteConfigMapName,
+		DeleteConfigMapLabelKey: TestDeleteConfigMapLabelKey,
+		AddonSubscriptionName:   TestAddonSubscriptionName,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
