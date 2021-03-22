@@ -23,7 +23,7 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: manager bin/readinessServer
+all: manager readinessServer
 
 export_env_vars:
 export NAMESPACE = openshift-storage
@@ -41,12 +41,8 @@ manager: generate fmt vet
 	go build -o bin/manager main.go
 
 # Build readiness probe binary
-bin/readinessServer: test-readinessServer readinessProbe/main.go readinessProbe/readiness/server.go
+readinessServer: fmt vet
 	go build -o bin/readinessServer readinessProbe/main.go
-
-.PHONY: test-readinessServer
-test-readinessServer:
-	go test github.com/openshift/ocs-osd-deployer/readinessProbe/readiness
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests export_env_vars
@@ -86,7 +82,7 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build: test test-readinessServer
+docker-build: test
 	docker build . -t ${IMG}
 
 # Push the docker image
