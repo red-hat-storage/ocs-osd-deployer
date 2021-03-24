@@ -175,14 +175,23 @@ func (r *ManagedOCSReconciler) generateStorageCluster(
 	if reconcileStrategy == v1.ReconcileStrategyStrict {
 		// Get an instance of the desired state
 		desired := utils.ObjectFromTemplate(templates.StorageClusterTemplate, r.Scheme).(*ocsv1.StorageCluster)
-
 		if err := r.setStorageClusterParamsFromSecret(desired); err != nil {
 			return err
 		}
 		// Override storage cluster spec with desired spec from the template.
 		// We do not replace meta or status on purpose
 
-		sc.Spec = desired.Spec
+		if sc.Spec.StorageDeviceSets == nil {
+			sc.Spec = desired.Spec
+		} else {
+			if sc.Spec.StorageDeviceSets[0].Count <= desired.Spec.StorageDeviceSets[0].Count {
+				sc.Spec = desired.Spec
+				r.Log.Info("Actual storage cluster parameter", "actualCount", sc.Spec.StorageDeviceSets[0].Count)
+			} else {
+				err := fmt.Errorf("Cannot set storage device set count: actualCount=%v", sc.Spec.StorageDeviceSets[0].Count)
+				r.Log.Error(err, "Reducing storage device set count is not allowed")
+			}
+		}
 	}
 
 	return nil
