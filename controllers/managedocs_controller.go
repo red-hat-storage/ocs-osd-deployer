@@ -188,7 +188,7 @@ func (r *ManagedOCSReconciler) generateStorageCluster(
 				sc.Spec = desired.Spec
 				r.Log.Info("Actual storage cluster parameter", "actualCount", sc.Spec.StorageDeviceSets[0].Count)
 			} else {
-				err := fmt.Errorf("Cannot set storage device set count: actualCount=%v", sc.Spec.StorageDeviceSets[0].Count)
+				err := fmt.Errorf("cannot set storage device set count: actualCount=%v", sc.Spec.StorageDeviceSets[0].Count)
 				r.Log.Error(err, "Reducing storage device set count is not allowed")
 			}
 		}
@@ -210,14 +210,14 @@ func (r *ManagedOCSReconciler) setStorageClusterParamsFromSecret(sc *ocsv1.Stora
 		&addonParamSecret,
 	); err != nil {
 		// Do not create the StorageCluster if the we fail to get the addon param secret
-		return fmt.Errorf("Failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
+		return fmt.Errorf("failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
 	}
 	addonParams := addonParamSecret.Data
 
 	sizeAsString := string(addonParams[storageClassSizeKey])
 	sdsCount, err := strconv.Atoi(sizeAsString)
 	if err != nil {
-		return fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
+		return fmt.Errorf("invalid storage cluster size value: %v", sizeAsString)
 	}
 
 	r.Log.Info("Storage cluster parameters", "count", sdsCount)

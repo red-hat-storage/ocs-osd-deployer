@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -280,6 +281,94 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Verify that the storage cluster was reverted to its original state
 				Expect(reflect.DeepEqual(sc.Spec, *spec)).Should(BeTrue())
+			})
+		})
+
+		When("the sds count is increased in secret", func() {
+			It("should increase storage cluster size", func() {
+				ctx := context.Background()
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				managedOCSKey := utils.GetResourceKey(managedOCS)
+				Expect(k8sClient.Get(ctx, managedOCSKey, managedOCS)).Should(Succeed())
+
+				sc := &ocsv1.StorageCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      storageClusterName,
+						Namespace: TestNamespace,
+					},
+				}
+				scKey := utils.GetResourceKey(sc)
+				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: map[string][]byte{
+						"size": []byte("2"),
+					},
+				}
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+				sdsCount, _ := strconv.Atoi(string(secret.Data["size"]))
+
+				scGen := sc.ObjectMeta.Generation
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, scKey, sc)
+					return err == nil && sc.ObjectMeta.Generation > scGen
+				}, timeout, interval).Should(BeTrue())
+
+				Expect(sdsCount == sc.Spec.StorageDeviceSets[0].Count).Should(BeTrue())
+			})
+		})
+
+		When("the sds count is decreased in secret", func() {
+			It("should not decrease storage cluster size", func() {
+				ctx := context.Background()
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				managedOCSKey := utils.GetResourceKey(managedOCS)
+				Expect(k8sClient.Get(ctx, managedOCSKey, managedOCS)).Should(Succeed())
+
+				sc := &ocsv1.StorageCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      storageClusterName,
+						Namespace: TestNamespace,
+					},
+				}
+				scKey := utils.GetResourceKey(sc)
+				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: map[string][]byte{
+						"size": []byte("1"),
+					},
+				}
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+				sdsCount, _ := strconv.Atoi(string(secret.Data["size"]))
+
+				scGen := sc.ObjectMeta.Generation
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, scKey, sc)
+					return err == nil && sc.ObjectMeta.Generation == scGen
+				}, timeout, interval).Should(BeTrue())
+
+				Expect(sdsCount < sc.Spec.StorageDeviceSets[0].Count).Should(BeTrue())
 			})
 		})
 
