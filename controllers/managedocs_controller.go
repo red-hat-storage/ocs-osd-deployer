@@ -171,33 +171,31 @@ func (r *ManagedOCSReconciler) generateStorageCluster(
 		return err
 	}
 
+	// Get sds count of storage cluster
+	currSdsCount := 0
+	for _, item := range sc.Spec.StorageDeviceSets {
+		if item.Name == deviceSetName {
+			currSdsCount = item.Count
+			break
+		}
+	}
+
 	// Handle strict mode reconciliation
 	if reconcileStrategy == v1.ReconcileStrategyStrict {
 		// Get an instance of the desired state
 		desired := utils.ObjectFromTemplate(templates.StorageClusterTemplate, r.Scheme).(*ocsv1.StorageCluster)
-		if err := r.setStorageClusterParamsFromSecret(desired); err != nil {
+		if err := r.setStorageClusterParamsFromSecret(desired, currSdsCount); err != nil {
 			return err
 		}
+
 		// Override storage cluster spec with desired spec from the template.
 		// We do not replace meta or status on purpose
-
-		if sc.Spec.StorageDeviceSets == nil {
-			sc.Spec = desired.Spec
-		} else {
-			if sc.Spec.StorageDeviceSets[0].Count <= desired.Spec.StorageDeviceSets[0].Count {
-				sc.Spec = desired.Spec
-				r.Log.Info("Actual storage cluster parameter", "actualCount", sc.Spec.StorageDeviceSets[0].Count)
-			} else {
-				err := fmt.Errorf("cannot set storage device set count: actualCount=%v", sc.Spec.StorageDeviceSets[0].Count)
-				r.Log.Error(err, "Reducing storage device set count is not allowed")
-			}
-		}
+		sc.Spec = desired.Spec
 	}
-
 	return nil
 }
 
-func (r *ManagedOCSReconciler) setStorageClusterParamsFromSecret(sc *ocsv1.StorageCluster) error {
+func (r *ManagedOCSReconciler) setStorageClusterParamsFromSecret(sc *ocsv1.StorageCluster, currSdsCount int) error {
 
 	// The addon param secret will contain the capacity of the cluster in Ti
 	// size = 1,  creates a cluster of 1 Ti capacity
@@ -210,22 +208,22 @@ func (r *ManagedOCSReconciler) setStorageClusterParamsFromSecret(sc *ocsv1.Stora
 		&addonParamSecret,
 	); err != nil {
 		// Do not create the StorageCluster if the we fail to get the addon param secret
-		return fmt.Errorf("failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
+		return fmt.Errorf("Failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
 	}
 	addonParams := addonParamSecret.Data
 
 	sizeAsString := string(addonParams[storageClassSizeKey])
+	r.Log.Info("Requested add-on settings", storageClassSizeKey, sizeAsString)
 	sdsCount, err := strconv.Atoi(sizeAsString)
 	if err != nil {
-		return fmt.Errorf("invalid storage cluster size value: %v", sizeAsString)
+		return fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
 	}
 
-	r.Log.Info("Storage cluster parameters", "count", sdsCount)
-
 	var ds *ocsv1.StorageDeviceSet = nil
-	for _, item := range sc.Spec.StorageDeviceSets {
+	for index := range sc.Spec.StorageDeviceSets {
+		item := &sc.Spec.StorageDeviceSets[index]
 		if item.Name == deviceSetName {
-			ds = &item
+			ds = item
 			break
 		}
 	}
@@ -233,7 +231,15 @@ func (r *ManagedOCSReconciler) setStorageClusterParamsFromSecret(sc *ocsv1.Stora
 		return fmt.Errorf("cloud not find default device set on stroage cluster")
 	}
 
-	sc.Spec.StorageDeviceSets[0].Count = sdsCount
+	// Prevent downscaling by comparing count from secret and count from storage cluster
+	r.Log.Info("Setting storage device set count", "Current", currSdsCount, "New", sdsCount)
+	if currSdsCount <= sdsCount {
+		ds.Count = sdsCount
+	} else {
+		r.Log.V(-1).Info("Requested storage device set count will result in downscaling, which is not supported. Skipping")
+		ds.Count = currSdsCount
+	}
+
 	return nil
 }
 
