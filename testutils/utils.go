@@ -6,6 +6,7 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -42,4 +43,16 @@ func ProbeReadiness() (int, error) {
 		return 0, err
 	}
 	return resp.StatusCode, nil
+}
+
+func WaitForResourceSpecToUpdate(k8sClient client.Client, ctx context.Context, obj runtime.Object, timeout time.Duration, interval time.Duration) {
+	accessor, err := meta.Accessor(obj)
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+
+	key := client.ObjectKey{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}
+	scGen := accessor.GetGeneration()
+	EventuallyWithOffset(1, func() bool {
+		err := k8sClient.Get(ctx, key, obj)
+		return err == nil && accessor.GetGeneration() > scGen
+	}, timeout, interval).Should(BeTrue())
 }

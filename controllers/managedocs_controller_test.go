@@ -272,14 +272,106 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Update(ctx, sc)).Should(Succeed())
 
 				// Wait for the storage cluster to be modfied again to reflect that it was reconciled
-				scGen := sc.ObjectMeta.Generation
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, scKey, sc)
-					return err == nil && sc.ObjectMeta.Generation > scGen
-				}, timeout, interval).Should(BeTrue())
+				utils.WaitForResourceSpecToUpdate(k8sClient, ctx, sc, timeout, interval)
 
 				// Verify that the storage cluster was reverted to its original state
 				Expect(reflect.DeepEqual(sc.Spec, *spec)).Should(BeTrue())
+			})
+		})
+
+		When("the sds count is increased in secret", func() {
+			It("should increase storage cluster size", func() {
+				ctx := context.Background()
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				managedOCSKey := utils.GetResourceKey(managedOCS)
+				Expect(k8sClient.Get(ctx, managedOCSKey, managedOCS)).Should(Succeed())
+
+				sc := &ocsv1.StorageCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      storageClusterName,
+						Namespace: TestNamespace,
+					},
+				}
+				scKey := utils.GetResourceKey(sc)
+				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: map[string][]byte{
+						"size": []byte("4"),
+					},
+				}
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				utils.WaitForResourceSpecToUpdate(k8sClient, ctx, sc, timeout, interval)
+
+				var ds *ocsv1.StorageDeviceSet = nil
+				for index := range sc.Spec.StorageDeviceSets {
+					item := &sc.Spec.StorageDeviceSets[index]
+					if item.Name == deviceSetName {
+						ds = item
+						break
+					}
+				}
+				Expect(ds.Count == 4).Should(BeTrue())
+			})
+		})
+
+		When("the sds count is decreased in secret", func() {
+			It("should not decrease storage cluster size", func() {
+				ctx := context.Background()
+
+				managedOCS := &v1.ManagedOCS{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      ManagedOCSName,
+						Namespace: TestNamespace,
+					},
+				}
+				managedOCSKey := utils.GetResourceKey(managedOCS)
+				Expect(k8sClient.Get(ctx, managedOCSKey, managedOCS)).Should(Succeed())
+
+				sc := &ocsv1.StorageCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      storageClusterName,
+						Namespace: TestNamespace,
+					},
+				}
+				scKey := utils.GetResourceKey(sc)
+				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestAddOnParamsSecretName,
+						Namespace: TestNamespace,
+					},
+					Data: map[string][]byte{
+						"size": []byte("1"),
+					},
+				}
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				time.Sleep(3 * time.Second)
+
+				Expect(k8sClient.Get(ctx, scKey, sc)).Should(Succeed())
+
+				var ds *ocsv1.StorageDeviceSet = nil
+				for index := range sc.Spec.StorageDeviceSets {
+					item := &sc.Spec.StorageDeviceSets[index]
+					if item.Name == deviceSetName {
+						ds = item
+						break
+					}
+				}
+				Expect(ds.Count != 1).Should(BeTrue())
 			})
 		})
 
