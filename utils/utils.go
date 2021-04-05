@@ -33,3 +33,24 @@ func ObjectFromTemplate(text string, scheme *runtime.Scheme) runtime.Object {
 	obj.GetObjectKind().SetGroupVersionKind(*group)
 	return obj
 }
+
+// Contains checks whether a string is contained within a slice
+func Contains(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+// Remove eliminates a given string from a slice and returns the new slice
+func Remove(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
+}

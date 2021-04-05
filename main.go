@@ -30,12 +30,14 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/go-logr/logr"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	"github.com/openshift/ocs-osd-deployer/controllers"
+	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -50,11 +52,20 @@ var (
 )
 
 func init() {
+
+	addAllSchemes(scheme)
+
+}
+
+func addAllSchemes(scheme *runtime.Scheme) {
+
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(ocsv1.AddToScheme(scheme))
 
 	utilruntime.Must(v1.AddToScheme(scheme))
+
+	utilruntime.Must(operators.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -88,11 +99,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	addonName := envVars[addonNameEnvVarName]
+
 	if err = (&controllers.ManagedOCSReconciler{
-		Client:               mgr.GetClient(),
-		Log:                  ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:               mgr.GetScheme(),
-		AddonParamSecretName: fmt.Sprintf("addon-%v-parameters", envVars[addonNameEnvVarName]),
+		Client:                  mgr.GetClient(),
+		UnrestrictedClient:      getUnrestrictedClient(),
+		Log:                     ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                  mgr.GetScheme(),
+		AddonParamSecretName:    fmt.Sprintf("addon-%v-parameters", addonName),
+		DeleteConfigMapName:     addonName,
+		DeleteConfigMapLabelKey: fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
+		AddonSubscriptionName:   fmt.Sprintf("addon-%v", addonName),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -108,6 +125,20 @@ func main() {
 		setupLog.Error(err, "Problem running manager")
 		os.Exit(1)
 	}
+}
+
+// getUnrestrictedClient creates a client required for listing PVCs from all namespaces.
+func getUnrestrictedClient() client.Client {
+	var options client.Options
+
+	options.Scheme = runtime.NewScheme()
+	addAllSchemes(options.Scheme)
+	k8sClient, err := client.New(config.GetConfigOrDie(), options)
+	if err != nil {
+		setupLog.Error(err, "error creating client")
+		os.Exit(1)
+	}
+	return k8sClient
 }
 
 func readEnvVars() (map[string]string, error) {
@@ -132,8 +163,9 @@ func readEnvVars() (map[string]string, error) {
 func ensureManagedOCS(c client.Client, log logr.Logger, envVars map[string]string) error {
 	err := c.Create(context.Background(), &v1.ManagedOCS{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "managedocs",
-			Namespace: envVars[namespaceEnvVarName],
+			Name:       "managedocs",
+			Namespace:  envVars[namespaceEnvVarName],
+			Finalizers: []string{controllers.ManagedOcsFinalizer},
 		},
 	})
 	if err == nil {
