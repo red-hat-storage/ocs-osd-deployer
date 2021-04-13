@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/go-logr/logr"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
@@ -64,9 +65,14 @@ func addAllSchemes(scheme *runtime.Scheme) {
 
 	utilruntime.Must(ocsv1.AddToScheme(scheme))
 
+	utilruntime.Must(promv1.AddToScheme(scheme))
+
+	// utilruntime.Must(promv1a1.AddToScheme(scheme))
+
 	utilruntime.Must(v1.AddToScheme(scheme))
 
 	utilruntime.Must(operators.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -101,16 +107,15 @@ func main() {
 	}
 
 	addonName := envVars[addonNameEnvVarName]
-
 	if err = (&controllers.ManagedOCSReconciler{
-		Client:                  mgr.GetClient(),
-		UnrestrictedClient:      getUnrestrictedClient(),
-		Log:                     ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:                  mgr.GetScheme(),
-		AddonParamSecretName:    fmt.Sprintf("addon-%v-parameters", addonName),
-		DeleteConfigMapName:     addonName,
-		DeleteConfigMapLabelKey: fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
-		AddonSubscriptionName:   fmt.Sprintf("addon-%v", addonName),
+		Client:                       mgr.GetClient(),
+		UnrestrictedClient:           getUnrestrictedClient(),
+		Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                       mgr.GetScheme(),
+		AddonParamSecretName:         fmt.Sprintf("addon-%v-parameters", addonName),
+		AddonConfigMapName:           addonName,
+		AddonConfigMapDeleteLabelKey: fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
+		DeployerSubscriptionName:     fmt.Sprintf("addon-%v", addonName),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -166,7 +171,7 @@ func ensureManagedOCS(c client.Client, log logr.Logger, envVars map[string]strin
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "managedocs",
 			Namespace:  envVars[namespaceEnvVarName],
-			Finalizers: []string{controllers.ManagedOcsFinalizer},
+			Finalizers: []string{controllers.ManagedOCSFinalizer},
 		},
 	})
 	if err == nil {

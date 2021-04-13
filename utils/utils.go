@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
@@ -53,4 +54,14 @@ func Remove(slice []string, s string) (result []string) {
 		result = append(result, item)
 	}
 	return
+}
+
+// AddLabel add a label to a resource metadata
+func AddLabel(obj metav1.Object, key string, value string) {
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+		obj.SetLabels(labels)
+	}
+	labels[key] = value
 }
