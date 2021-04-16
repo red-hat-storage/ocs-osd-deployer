@@ -21,8 +21,11 @@ const PrometheusTemplate = `
 apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
 spec:
-  serviceAccountName: ocs-monitoring
+  serviceAccountName: prometheus-k8s
   serviceMonitorSelector:
+    matchLabels:
+      app: managed-ocs
+  ruleSelector:
     matchLabels:
       app: managed-ocs
   podMonitorSelector:
@@ -33,4 +36,9 @@ spec:
       cpu: 1
       memory: 200Mi
   enableAdminAPI: false
+  alerting:
+    alertmanagers:
+    - namespace: openshift-storage
+      name: alertmanager-operated
+      port: web
 `
