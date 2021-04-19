@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -12,6 +13,7 @@ import (
 	utils "github.com/openshift/ocs-osd-deployer/testutils"
 	ctrlutils "github.com/openshift/ocs-osd-deployer/utils"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,14 +46,44 @@ var _ = Describe("ManagedOCS controller", func() {
 			Name:      prometheusName,
 			Namespace: testPrimaryNamespace,
 		},
-		Status: &promv1.PrometheusStatus{},
+	}
+	promStsTemplate := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("prometheus-%s", prometheusName),
+			Namespace: testPrimaryNamespace,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"label": "value"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"label": "value"},
+				},
+			},
+		},
 	}
 	amTemplate := promv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      alertmanagerName,
 			Namespace: testPrimaryNamespace,
 		},
-		Status: &promv1.AlertmanagerStatus{},
+	}
+	amStsTemplate := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("alertmanager-%s", alertmanagerName),
+			Namespace: testPrimaryNamespace,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"label": "value"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"label": "value"},
+				},
+			},
+		},
 	}
 	podMonitorTemplate := promv1.PodMonitor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -167,22 +199,38 @@ var _ = Describe("ManagedOCS controller", func() {
 		// Setup prometheus state
 		prom := promTemplate.DeepCopy()
 		Expect(k8sClient.Get(ctx, utils.GetResourceKey(prom), prom)).Should(Succeed())
-		if shouldPrometheusBeReady {
-			prom.Status.UnavailableReplicas = 0
-		} else {
-			prom.Status.UnavailableReplicas = 1
+		desiredReplicas := int32(1)
+		if prom.Spec.Replicas != nil {
+			desiredReplicas = *prom.Spec.Replicas
 		}
-		Expect(k8sClient.Update(ctx, prom)).Should(Succeed())
+		promSts := promStsTemplate.DeepCopy()
+		Expect(k8sClient.Get(ctx, utils.GetResourceKey(promSts), promSts)).Should(Succeed())
+		if shouldPrometheusBeReady {
+			promSts.Status.Replicas = desiredReplicas
+			promSts.Status.ReadyReplicas = desiredReplicas
+		} else {
+			promSts.Status.Replicas = 0
+			promSts.Status.ReadyReplicas = 0
+		}
+		Expect(k8sClient.Status().Update(ctx, promSts)).Should(Succeed())
 
 		// Setup alertmanager state
 		am := amTemplate.DeepCopy()
 		Expect(k8sClient.Get(ctx, utils.GetResourceKey(am), am)).Should(Succeed())
-		if shouldAlertmanagerBeReady {
-			am.Status.UnavailableReplicas = 0
-		} else {
-			am.Status.UnavailableReplicas = 1
+		desiredReplicas = int32(1)
+		if am.Spec.Replicas != nil {
+			desiredReplicas = *am.Spec.Replicas
 		}
-		Expect(k8sClient.Update(ctx, am)).Should(Succeed())
+		amSts := amStsTemplate.DeepCopy()
+		Expect(k8sClient.Get(ctx, utils.GetResourceKey(amSts), amSts)).Should(Succeed())
+		if shouldAlertmanagerBeReady {
+			amSts.Status.Replicas = desiredReplicas
+			amSts.Status.ReadyReplicas = desiredReplicas
+		} else {
+			amSts.Status.Replicas = 0
+			amSts.Status.ReadyReplicas = 0
+		}
+		Expect(k8sClient.Status().Update(ctx, amSts)).Should(Succeed())
 
 		// Setup pvc1 state (an rbd backed pvc in the primary namespace)
 		pvc1 := pvc1Template.DeepCopy()
@@ -391,16 +439,16 @@ var _ = Describe("ManagedOCS controller", func() {
 				}, timeout, interval).Should(Equal(v1.ComponentReady))
 			})
 		})
-		When("prometheus has unavailable replicas", func() {
+		When("prometheus has non-ready replicas", func() {
 			It("should reflect that in the ManagedOCS resource status", func() {
 				By("by setting Status.Components.Prometheus.State to Pending")
-				// Ensure that the prometheus resource has unavailable replicas
-				prom := promTemplate.DeepCopy()
-				Expect(k8sClient.Get(ctx, utils.GetResourceKey(prom), prom)).Should(Succeed())
+				// Updating the status of the prometheus statefulset should trigger a reconcile for managedocs
+				promSts := promStsTemplate.DeepCopy()
+				Expect(k8sClient.Create(ctx, promSts)).Should(Succeed())
 
-				// Updating the status of the prometheus resource should trigger a reconcile for managedocs
-				prom.Status.UnavailableReplicas = 1
-				Expect(k8sClient.Update(ctx, prom)).Should(Succeed())
+				promSts.Status.Replicas = 0
+				promSts.Status.ReadyReplicas = 0
+				Expect(k8sClient.Status().Update(ctx, promSts)).Should(Succeed())
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey(managedOCS)
@@ -410,16 +458,21 @@ var _ = Describe("ManagedOCS controller", func() {
 				}, timeout, interval).Should(Equal(v1.ComponentPending))
 			})
 		})
-		When("all prometheus replicas are available", func() {
+		When("all prometheus replicas are ready", func() {
 			It("should reflect that in the ManagedOCS resource status", func() {
 				By("by setting Status.Components.Prometheus.State to Ready")
-				// Ensure that the prometheus resource has unavailable replicas
 				prom := promTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(prom), prom)).Should(Succeed())
+				desiredReplicas := int32(1)
+				if prom.Spec.Replicas != nil {
+					desiredReplicas = *prom.Spec.Replicas
+				}
 
-				// Updating the status of the prometheus resource should trigger a reconcile for managedocs
-				prom.Status.UnavailableReplicas = 0
-				Expect(k8sClient.Update(ctx, prom)).Should(Succeed())
+				// Updating the status of the prometheus statefulset should trigger a reconcile for managedocs
+				promSts := promStsTemplate.DeepCopy()
+				promSts.Status.Replicas = desiredReplicas
+				promSts.Status.ReadyReplicas = desiredReplicas
+				Expect(k8sClient.Status().Update(ctx, promSts)).Should(Succeed())
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey(managedOCS)
@@ -429,16 +482,16 @@ var _ = Describe("ManagedOCS controller", func() {
 				}, timeout, interval).Should(Equal(v1.ComponentReady))
 			})
 		})
-		When("alertmanager has unavailable replicas", func() {
+		When("alertmanager has non-ready replicas", func() {
 			It("should reflect that in the ManagedOCS resource status", func() {
 				By("by setting Status.Components.Alertmanager.State to Pending")
-				// Ensure that the prometheus resource has unavailable replicas
-				am := amTemplate.DeepCopy()
-				Expect(k8sClient.Get(ctx, utils.GetResourceKey(am), am)).Should(Succeed())
+				// Updating the status of the alertmanager statefulset should trigger a reconcile for managedocs
+				amSts := amStsTemplate.DeepCopy()
+				Expect(k8sClient.Create(ctx, amSts)).Should(Succeed())
 
-				// Updating the status of the prometheus resource should trigger a reconcile for managedocs
-				am.Status.UnavailableReplicas = 1
-				Expect(k8sClient.Update(ctx, am)).Should(Succeed())
+				amSts.Status.Replicas = 0
+				amSts.Status.ReadyReplicas = 0
+				Expect(k8sClient.Status().Update(ctx, amSts)).Should(Succeed())
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey(managedOCS)
@@ -448,16 +501,21 @@ var _ = Describe("ManagedOCS controller", func() {
 				}, timeout, interval).Should(Equal(v1.ComponentPending))
 			})
 		})
-		When("all alertmanager replicas are available", func() {
+		When("all alertmanager replicas are ready", func() {
 			It("should reflect that in the ManagedOCS resource status", func() {
 				By("by setting Status.Components.Alertmanager.State to Ready")
-				// Ensure that the prometheus resource has unavailable replicas
 				am := amTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(am), am)).Should(Succeed())
+				desiredReplicas := int32(1)
+				if am.Spec.Replicas != nil {
+					desiredReplicas = *am.Spec.Replicas
+				}
 
-				// Updating the status of the prometheus resource should trigger a reconcile for managedocs
-				am.Status.UnavailableReplicas = 0
-				Expect(k8sClient.Update(ctx, am)).Should(Succeed())
+				// Updating the status of the alertmanager statefulset should trigger a reconcile for managedocs
+				amSts := amStsTemplate.DeepCopy()
+				amSts.Status.Replicas = desiredReplicas
+				amSts.Status.ReadyReplicas = desiredReplicas
+				Expect(k8sClient.Status().Update(ctx, amSts)).Should(Succeed())
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey(managedOCS)
