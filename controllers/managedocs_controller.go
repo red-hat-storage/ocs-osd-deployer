@@ -24,6 +24,7 @@ import (
 	"time"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -93,8 +94,9 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=storageclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={alertmanagers,prometheuses},verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={podmonitors,servicemonitors,prometheusrules},verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources={subscriptions,clusterserviceversions},verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
@@ -129,6 +131,15 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			func(meta metav1.Object, _ runtime.Object) bool {
 				labels := meta.GetLabels()
 				return labels == nil || labels[monLabelKey] != monLabelValue
+			},
+		),
+	)
+	monStatefulSetPredicates := builder.WithPredicates(
+		predicate.NewPredicateFuncs(
+			func(meta metav1.Object, _ runtime.Object) bool {
+				name := meta.GetName()
+				return name == fmt.Sprintf("prometheus-%s", prometheusName) ||
+					name == fmt.Sprintf("alertmanager-%s", alertmanagerName)
 			},
 		),
 	)
@@ -180,6 +191,11 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &promv1.PrometheusRule{}},
 			&enqueueManangedOCSRequest,
 			monResourcesPredicates,
+		).
+		Watches(
+			&source.Kind{Type: &appsv1.StatefulSet{}},
+			&enqueueManangedOCSRequest,
+			monStatefulSetPredicates,
 		).
 
 		// Create the controller
@@ -344,10 +360,21 @@ func (r *ManagedOCSReconciler) updateComponentStatus() {
 	// Getting the status of the Prometheus component.
 	promStatus := &r.managedOCS.Status.Components.Prometheus
 	if err := r.get(r.prometheus); err == nil {
-		if r.prometheus.Status == nil || r.prometheus.Status.UnavailableReplicas > 0 {
-			promStatus.State = v1.ComponentPending
+		promStatefulSet := &appsv1.StatefulSet{}
+		promStatefulSet.Namespace = r.namespace
+		promStatefulSet.Name = fmt.Sprintf("prometheus-%s", prometheusName)
+		if err := r.get(promStatefulSet); err == nil {
+			desiredReplicas := int32(1)
+			if r.prometheus.Spec.Replicas != nil {
+				desiredReplicas = *r.prometheus.Spec.Replicas
+			}
+			if promStatefulSet.Status.ReadyReplicas != desiredReplicas {
+				promStatus.State = v1.ComponentPending
+			} else {
+				promStatus.State = v1.ComponentReady
+			}
 		} else {
-			promStatus.State = v1.ComponentReady
+			promStatus.State = v1.ComponentPending
 		}
 	} else if errors.IsNotFound(err) {
 		promStatus.State = v1.ComponentNotFound
@@ -359,10 +386,21 @@ func (r *ManagedOCSReconciler) updateComponentStatus() {
 	// Getting the status of the Alertmanager component.
 	amStatus := &r.managedOCS.Status.Components.Alertmanager
 	if err := r.get(r.alertmanager); err == nil {
-		if r.alertmanager.Status == nil || r.alertmanager.Status.UnavailableReplicas > 0 {
-			amStatus.State = v1.ComponentPending
+		amStatefulSet := &appsv1.StatefulSet{}
+		amStatefulSet.Namespace = r.namespace
+		amStatefulSet.Name = fmt.Sprintf("alertmanager-%s", alertmanagerName)
+		if err := r.get(amStatefulSet); err == nil {
+			desiredReplicas := int32(1)
+			if r.alertmanager.Spec.Replicas != nil {
+				desiredReplicas = *r.alertmanager.Spec.Replicas
+			}
+			if amStatefulSet.Status.ReadyReplicas != desiredReplicas {
+				amStatus.State = v1.ComponentPending
+			} else {
+				amStatus.State = v1.ComponentReady
+			}
 		} else {
-			amStatus.State = v1.ComponentReady
+			amStatus.State = v1.ComponentPending
 		}
 	} else if errors.IsNotFound(err) {
 		amStatus.State = v1.ComponentNotFound
