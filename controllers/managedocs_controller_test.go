@@ -116,6 +116,20 @@ var _ = Describe("ManagedOCS controller", func() {
 		},
 		Data: map[string][]byte{},
 	}
+	pdSecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testPagerdutySecretName,
+			Namespace: testPrimaryNamespace,
+		},
+		Data: map[string][]byte{},
+	}
+	amConfigSecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      alertmanagerConfigSecretName,
+			Namespace: testPrimaryNamespace,
+		},
+		Data: map[string][]byte{},
+	}
 	addonConfigMapTemplate := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testAddonConfigMapName,
@@ -667,6 +681,42 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Wait for the alertmanager to be recreated
 				utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is no pagerduty secret in the cluster", func() {
+			It("should not create alertmanager config secret", func() {
+				// Verify that a pagerduty secret is not present
+				secret := pdSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
+					WithTransform(errors.IsNotFound, BeTrue()),
+				)
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is no value for PAGERDUTY_KEY in the pagerduty secret", func() {
+			It("should not create alertmanager config secret", func() {
+				// Create empty pagerduty secret
+				secret := pdSecretTemplate.DeepCopy()
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+
+				// Remove the secret for future cases
+				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+			})
+		})
+		When("there is a value for PAGERDUTY_KEY in the pagerduty secret", func() {
+			It("should create alertmanager config secret", func() {
+				// Create pagerduty secret with valid key
+				secret := pdSecretTemplate.DeepCopy()
+				secret.Data["PAGERDUTY_KEY"] = []byte("test-key")
+				By("Creating an alertmanager config secret")
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+				utils.WaitForResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("there is a pod monitor without an ocs-dedicated label", func() {

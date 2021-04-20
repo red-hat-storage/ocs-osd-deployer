@@ -51,6 +51,7 @@ const (
 	testPrimaryNamespace             = "primary"
 	testSecondaryNamespace           = "secondary"
 	testAddonParamsSecretName        = "test-addon-secret"
+	testPagerdutySecretName          = "test-pagerduty-secret"
 	testAddonConfigMapName           = "test-addon-configmap"
 	testAddonConfigMapDeleteLabelKey = "test-addon-configmap-delete-label-key"
 	testSubscriptionName             = "test-subscription"
@@ -109,6 +110,7 @@ var _ = BeforeSuite(func(done Done) {
 		AddonConfigMapName:           testAddonConfigMapName,
 		AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
 		DeployerSubscriptionName:     testSubscriptionName,
+		PagerdutySecretName:          testPagerdutySecretName,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
