@@ -18,22 +18,7 @@ package utils
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
-
-// ObjectFromTemplate returns a runtime object based on a text yaml/json string template
-func ObjectFromTemplate(text string, scheme *runtime.Scheme) runtime.Object {
-	// Decode text (yaml/json) to kube api object
-	deserializer := serializer.NewCodecFactory(scheme).UniversalDeserializer()
-	obj, group, err := deserializer.Decode([]byte(text), nil, nil)
-	if err != nil {
-		panic(err)
-	}
-	// not sure if really needed, but set it anyway
-	obj.GetObjectKind().SetGroupVersionKind(*group)
-	return obj
-}
 
 // Contains checks whether a string is contained within a slice
 func Contains(slice []string, s string) bool {
