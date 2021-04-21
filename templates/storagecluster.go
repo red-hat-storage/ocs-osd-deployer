@@ -16,69 +16,105 @@ limitations under the License.
 
 package templates
 
+import (
+	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
+	rook "github.com/rook/rook/pkg/apis/rook.io/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
 // StorageClusterTemplate is the template that serves as the base for the storage clsuter deployed by the operator
-const StorageClusterTemplate = `
-apiVersion: ocs.openshift.io/v1
-kind: StorageCluster
-spec:
-  # The label selector is used to select only the worker nodes for
-  # both labeling and scheduling.
-  labelSelector:
-    matchExpressions:
-      - key: node-role.kubernetes.io/worker
-        operator: Exists
-      - key: node-role.kubernetes.io/infra
-        operator: DoesNotExist
-  manageNodes: false
-  monPVCTemplate:
-    spec:
-      storageClassName: gp2
-      accessModes:
-        - ReadWriteOnce
-  resources:
-    mds:
-      limits:
-        cpu: 3000m
-        memory: 8Gi
-      requests:
-        cpu: 1000m
-        memory: 8Gi
-    mgr:
-      limits:
-        cpu: 1000m
-        memory: 3Gi
-      requests:
-        cpu: 1000m
-        memory: 3Gi
-    mon:
-      limits:
-        cpu: 1000m
-        memory: 2Gi
-      requests:
-        cpu: 1000m
-        memory: 2Gi
-  storageDeviceSets:
-    - name: default
-      count: 1
-      dataPVCTemplate:
-        spec:
-          storageClassName: gp2
-          accessModes:
-            - ReadWriteOnce
-          volumeMode: Block
-          resources:
-            requests:
-              storage: 1Ti
-      placement: {}
-      portable: true
-      replica: 3
-      resources:
-        limits:
-          cpu: 2000m
-          memory: 5Gi
-        requests:
-          cpu: 1000m
-          memory: 5Gi
-  multiCloudGateway:
-    reconcileStrategy: "ignore"
-`
+var gp2 = "gp2"
+var volumeModeBlock = corev1.PersistentVolumeBlock
+
+var StorageClusterTemplate = ocsv1.StorageCluster{
+	Spec: ocsv1.StorageClusterSpec{
+		// The label selector is used to select only the worker nodes for
+		// both labeling and scheduling.
+		LabelSelector: &metav1.LabelSelector{
+			MatchExpressions: []metav1.LabelSelectorRequirement{{
+				Key:      "node-role.kubernetes.io/worker",
+				Operator: metav1.LabelSelectorOpExists,
+			}, {
+				Key:      "node-role.kubernetes.io/infra",
+				Operator: metav1.LabelSelectorOpDoesNotExist,
+			}},
+		},
+		ManageNodes: false,
+		MonPVCTemplate: &corev1.PersistentVolumeClaim{
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: &gp2,
+				AccessModes: []corev1.PersistentVolumeAccessMode{
+					corev1.ReadWriteOnce,
+				},
+			},
+		},
+		Resources: map[string]corev1.ResourceRequirements{
+			"mds": {
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("3000m"),
+					"memory": resource.MustParse("8Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("1000m"),
+					"memory": resource.MustParse("8Gi"),
+				},
+			},
+			"mgr": {
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("1000m"),
+					"memory": resource.MustParse("3Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("1000m"),
+					"memory": resource.MustParse("3Gi"),
+				},
+			},
+			"mon": {
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("1000m"),
+					"memory": resource.MustParse("2Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("1000m"),
+					"memory": resource.MustParse("2Gi"),
+				},
+			},
+		},
+		StorageDeviceSets: []ocsv1.StorageDeviceSet{{
+			Name:  "default",
+			Count: 1,
+			DataPVCTemplate: corev1.PersistentVolumeClaim{
+				Spec: corev1.PersistentVolumeClaimSpec{
+					StorageClassName: &gp2,
+					AccessModes: []corev1.PersistentVolumeAccessMode{
+						corev1.ReadWriteOnce,
+					},
+					VolumeMode: &volumeModeBlock,
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"storage": resource.MustParse("1Ti"),
+						},
+					},
+				},
+			},
+			Placement: rook.Placement{},
+			Portable:  true,
+			Replica:   3,
+			Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("2000m"),
+					"memory": resource.MustParse("5Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("1000m"),
+					"memory": resource.MustParse("5Gi"),
+				},
+			},
+		}},
+		MultiCloudGateway: &ocsv1.MultiCloudGatewaySpec{
+			ReconcileStrategy: "ignore",
+		},
+	},
+}

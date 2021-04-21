@@ -16,14 +16,16 @@ limitations under the License.
 
 package templates
 
+import (
+	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+)
+
 // AlertmanagerTemplate is the template that serves as the base for the Alert Manager deployed by the operator
-const AlertmanagerTemplate = `
-apiVersion: monitoring.coreos.com/v1
-kind: Alertmanager
-spec:
-  replicas: 3
-  alertmanagerConfigSelector:
-    matchLabels:
-      app: managed-ocs
-  configSecret: managed-ocs-alertmanager-config-secret
-`
+var _3 = int32(3)
+
+var AlertmanagerTemplate = promv1.Alertmanager{
+	Spec: promv1.AlertmanagerSpec{
+		Replicas:     &_3,
+		ConfigSecret: "managed-ocs-alertmanager-config-secret",
+	},
+}

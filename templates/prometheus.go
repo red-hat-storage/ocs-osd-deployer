@@ -16,29 +16,40 @@ limitations under the License.
 
 package templates
 
+import (
+	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
 // PrometheusTemplate is the template that serves as the base for the prometheus deployed by the operator
-const PrometheusTemplate = `
-apiVersion: monitoring.coreos.com/v1
-kind: Prometheus
-spec:
-  serviceAccountName: prometheus-k8s
-  serviceMonitorSelector:
-    matchLabels:
-      app: managed-ocs
-  ruleSelector:
-    matchLabels:
-      app: managed-ocs
-  podMonitorSelector:
-    matchLabels:
-      app: managed-ocs
-  resources:
-    requests:
-      cpu: 1
-      memory: 200Mi
-  enableAdminAPI: false
-  alerting:
-    alertmanagers:
-    - namespace: openshift-storage
-      name: alertmanager-operated
-      port: web
-`
+var resourceSelector = metav1.LabelSelector{
+	MatchLabels: map[string]string{
+		"app": "managed-ocs",
+	},
+}
+
+var PrometheusTemplate = promv1.Prometheus{
+	Spec: promv1.PrometheusSpec{
+		ServiceAccountName:     "prometheus-k8s",
+		ServiceMonitorSelector: &resourceSelector,
+		PodMonitorSelector:     &resourceSelector,
+		RuleSelector:           &resourceSelector,
+		EnableAdminAPI:         false,
+		Alerting: &promv1.AlertingSpec{
+			Alertmanagers: []promv1.AlertmanagerEndpoints{{
+				Namespace: "",
+				Name:      "alertmanager-operated",
+				Port:      intstr.FromString("web"),
+			}},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("200Mi"),
+			},
+		},
+	},
+}

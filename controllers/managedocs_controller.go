@@ -19,10 +19,11 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -87,9 +88,8 @@ type ManagedOCSReconciler struct {
 	alertmanager             *promv1.Alertmanager
 	pagerdutySecret          *corev1.Secret
 	alertmanagerConfigSecret *corev1.Secret
-	// alertmanagerConfig *promv1a1.AlertmanagerConfig
-	namespace         string
-	reconcileStrategy v1.ReconcileStrategy
+	namespace                string
+	reconcileStrategy        v1.ReconcileStrategy
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -459,7 +459,7 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 		// Handle only strict mode reconciliation
 		if r.reconcileStrategy == v1.ReconcileStrategyStrict {
 			// Get an instance of the desired state
-			desired := utils.ObjectFromTemplate(templates.StorageClusterTemplate, r.Scheme).(*ocsv1.StorageCluster)
+			desired := templates.StorageClusterTemplate.DeepCopy()
 			if err := r.updateStorageClusterFromAddonParamsSecret(desired); err != nil {
 				return err
 			}
@@ -540,7 +540,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			return err
 		}
 
-		desired := utils.ObjectFromTemplate(templates.PrometheusTemplate, r.Scheme).(*promv1.Prometheus)
+		desired := templates.PrometheusTemplate.DeepCopy()
 		r.prometheus.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
 		r.prometheus.Spec = desired.Spec
 
@@ -560,7 +560,7 @@ func (r *ManagedOCSReconciler) reconcileAlertmanager() error {
 			return err
 		}
 
-		desired := utils.ObjectFromTemplate(templates.AlertmanagerTemplate, r.Scheme).(*promv1.Alertmanager)
+		desired := templates.AlertmanagerTemplate.DeepCopy()
 		r.alertmanager.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
 		r.alertmanager.Spec = desired.Spec
 
