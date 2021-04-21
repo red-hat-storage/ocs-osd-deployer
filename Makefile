@@ -48,6 +48,7 @@ readinessServer: fmt vet
 run: generate fmt vet manifests export_env_vars
 	kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 	kubectl create secret generic addon-${ADDON_NAME}-parameters -n ${NAMESPACE} --from-literal size=1 --dry-run=client -oyaml | kubectl apply -f -
+	kubectl create secret generic ${ADDON_NAME}-pagerduty -n ${NAMESPACE} --from-literal PAGERDUTY_KEY="test-key" --dry-run=client -oyaml | kubectl apply -f -
 	go run ./main.go
 
 # Install CRDs into a cluster

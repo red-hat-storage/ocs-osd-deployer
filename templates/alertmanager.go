@@ -25,4 +25,5 @@ spec:
   alertmanagerConfigSelector:
     matchLabels:
       app: managed-ocs
+  configSecret: managed-ocs-alertmanager-config-secret
 `

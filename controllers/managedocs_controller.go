@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"strconv"
 	"strings"
 	"time"
@@ -52,18 +53,18 @@ const (
 )
 
 const (
-	managedOCSName         = "managedocs"
-	storageClusterName     = "ocs-storagecluster"
-	prometheusName         = "managed-ocs-prometheus"
-	alertmanagerName       = "managed-ocs-alertmanager"
-	alertmanagerConfigName = "managed-ocs-alertmanager-config"
-	storageClassSizeKey    = "size"
-	deviceSetName          = "default"
-	storageClassRbdName    = "ocs-storagecluster-ceph-rbd"
-	storageClassCephFSName = "ocs-storagecluster-cephfs"
-	deployerCSVPrefix      = "ocs-osd-deployer"
-	monLabelKey            = "app"
-	monLabelValue          = "managed-ocs"
+	managedOCSName               = "managedocs"
+	storageClusterName           = "ocs-storagecluster"
+	prometheusName               = "managed-ocs-prometheus"
+	alertmanagerName             = "managed-ocs-alertmanager"
+	alertmanagerConfigSecretName = "managed-ocs-alertmanager-config-secret"
+	storageClassSizeKey          = "size"
+	deviceSetName                = "default"
+	storageClassRbdName          = "ocs-storagecluster-ceph-rbd"
+	storageClassCephFSName       = "ocs-storagecluster-cephfs"
+	deployerCSVPrefix            = "ocs-osd-deployer"
+	monLabelKey                  = "app"
+	monLabelValue                = "managed-ocs"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -77,12 +78,15 @@ type ManagedOCSReconciler struct {
 	AddonConfigMapName           string
 	AddonConfigMapDeleteLabelKey string
 	DeployerSubscriptionName     string
+	PagerdutySecretName          string
 
-	ctx            context.Context
-	managedOCS     *v1.ManagedOCS
-	storageCluster *ocsv1.StorageCluster
-	prometheus     *promv1.Prometheus
-	alertmanager   *promv1.Alertmanager
+	ctx                      context.Context
+	managedOCS               *v1.ManagedOCS
+	storageCluster           *ocsv1.StorageCluster
+	prometheus               *promv1.Prometheus
+	alertmanager             *promv1.Alertmanager
+	pagerdutySecret          *corev1.Secret
+	alertmanagerConfigSecret *corev1.Secret
 	// alertmanagerConfig *promv1a1.AlertmanagerConfig
 	namespace         string
 	reconcileStrategy v1.ReconcileStrategy
@@ -94,9 +98,9 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=storageclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={alertmanagers,prometheuses},verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={podmonitors,servicemonitors,prometheusrules},verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources={subscriptions,clusterserviceversions},verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
@@ -111,6 +115,13 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		predicate.NewPredicateFuncs(
 			func(meta metav1.Object, _ runtime.Object) bool {
 				return meta.GetName() == r.AddonParamSecretName
+			},
+		),
+	)
+	pagerdutySecretPredicates := builder.WithPredicates(
+		predicate.NewPredicateFuncs(
+			func(meta metav1.Object, _ runtime.Object) bool {
+				return meta.GetName() == r.PagerdutySecretName
 			},
 		),
 	)
@@ -164,7 +175,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&ocsv1.StorageCluster{}).
 		Owns(&promv1.Prometheus{}).
 		Owns(&promv1.Alertmanager{}).
-		// Owns(&promv1a1.AlertmanagerConfig{}).
+		Owns(&corev1.Secret{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -196,6 +207,11 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &appsv1.StatefulSet{}},
 			&enqueueManangedOCSRequest,
 			monStatefulSetPredicates,
+		).
+		Watches(
+			&source.Kind{Type: &corev1.Secret{}},
+			&enqueueManangedOCSRequest,
+			pagerdutySecretPredicates,
 		).
 
 		// Create the controller
@@ -261,9 +277,14 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.alertmanager.Name = alertmanagerName
 	r.alertmanager.Namespace = r.namespace
 
-	// r.alertmanagerConfig = &promv1a1.AlertmanagerConfig{}
-	// r.alertmanagerConfig.Name = alertmanagerConfigName
-	// r.alertmanagerConfig.Namespace = r.namespace
+	r.pagerdutySecret = &corev1.Secret{}
+	r.pagerdutySecret.Name = r.PagerdutySecretName
+	r.pagerdutySecret.Namespace = r.namespace
+
+	r.alertmanagerConfigSecret = &corev1.Secret{}
+	r.alertmanagerConfigSecret.Name = alertmanagerConfigSecretName
+	r.alertmanagerConfigSecret.Namespace = r.namespace
+
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -308,7 +329,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileAlertmanager(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcileAlertmanagerConfig(); err != nil {
+		if err := r.reconcileAlertmanagerConfigSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileMonitoringResources(); err != nil {
@@ -551,25 +572,71 @@ func (r *ManagedOCSReconciler) reconcileAlertmanager() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
-	// r.Log.Info("Reconciling AlertmanagerConfig")
-	// _, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.alertmanagerConfig, func() error {
-	// 	if err := r.own(r.alertmanagerConfig); err != nil {
-	// 		return err
-	// 	}
+func (r *ManagedOCSReconciler) reconcileAlertmanagerConfigSecret() error {
+	r.Log.Info("Reconciling AlertmanagerConfig secret")
 
-	// 	desired := utils.ObjectFromTemplate(templates.AlertmanagerConfigTemplate, r.Scheme).(*promv1a1.AlertmanagerConfig)
-	// 	r.alertmanagerConfig.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
-	// 	// TODO: Setup pagerduty and deadman sqtich on the desired alertmanagr config
-	// 	r.alertmanagerConfig.Spec = desired.Spec
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.alertmanagerConfigSecret, func() error {
+		if err := r.own(r.alertmanagerConfigSecret); err != nil {
+			return err
+		}
 
-	// 	return nil
-	// })
-	// if err != nil {
-	// 	return err
-	// }
+		if err := r.get(r.pagerdutySecret); err != nil {
+			return fmt.Errorf("Unable to get pagerduty secret: %v", err)
+		}
 
-	return nil
+		pagerdutySecretData := r.pagerdutySecret.Data
+		pagerdutyServiceKey := string(pagerdutySecretData["PAGERDUTY_KEY"])
+		if pagerdutyServiceKey == "" {
+			return fmt.Errorf("Pagerduty secret does not contain a PAGERDUTY_KEY entry")
+		}
+
+		alertmanagerConfig := r.getAlertmanagerConfig(pagerdutyServiceKey)
+		config, err := yaml.Marshal(alertmanagerConfig)
+		if err != nil {
+			return fmt.Errorf("Unable to encode alertmanager conifg: %v", err)
+		}
+		r.alertmanagerConfigSecret.Data = map[string][]byte{
+			"alertmanager.yaml": config,
+		}
+		return nil
+	})
+
+	return err
+}
+
+func (r *ManagedOCSReconciler) getAlertmanagerConfig(pagerdutyServiceKey string) interface{} {
+
+	alertmanagerConfig := struct {
+		Route struct {
+			GroupWait      string `yaml:"group_wait"`
+			GroupInterval  string `yaml:"group_interval"`
+			RepeatInterval string `yaml:"repeat_interval"`
+			Receiver       string `yaml:"receiver"`
+			Routes         [1]struct {
+				Match struct {
+					Severity string `yaml:"severity"`
+				} `yaml:"match"`
+				Receiver string `yaml:"receiver"`
+			} `yaml:"routes"`
+		} `yaml:"route"`
+		Receivers [1]struct {
+			Name             string `yaml:"name"`
+			PagerdutyConfigs [1]struct {
+				ServiceKey string `yaml:"service_key"`
+			} `yaml:"pagerduty_configs"`
+		} `yaml:"receivers"`
+	}{}
+
+	alertmanagerConfig.Route.GroupWait = "30s"
+	alertmanagerConfig.Route.GroupInterval = "5m"
+	alertmanagerConfig.Route.RepeatInterval = "4h"
+	alertmanagerConfig.Route.Receiver = "pagerduty"
+	alertmanagerConfig.Route.Routes[0].Match.Severity = "critical"
+	alertmanagerConfig.Route.Routes[0].Receiver = "pagerduty"
+	alertmanagerConfig.Receivers[0].Name = "pagerduty"
+	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].ServiceKey = pagerdutyServiceKey
+
+	return &alertmanagerConfig
 }
 
 // reconcileMonitoringResources labels all monitoring resources (ServiceMonitors, PodMonitors, and PrometheusRules)

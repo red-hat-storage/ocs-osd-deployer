@@ -116,6 +116,7 @@ func main() {
 		AddonConfigMapName:           addonName,
 		AddonConfigMapDeleteLabelKey: fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
 		DeployerSubscriptionName:     fmt.Sprintf("addon-%v", addonName),
+		PagerdutySecretName:          fmt.Sprintf("%v-pagerduty", addonName),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
