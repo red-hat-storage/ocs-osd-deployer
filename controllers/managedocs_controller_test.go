@@ -667,15 +667,6 @@ var _ = Describe("ManagedOCS controller", func() {
 				utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
 			})
 		})
-		When("the dms prometheus rule resource is deleted", func() {
-			It("should create a new dms prometheus rule in the namespace", func() {
-				// Delete the prometheus rule resource
-				Expect(k8sClient.Delete(ctx, dmsPromRuleTemplate.DeepCopy())).Should(Succeed())
-
-				// Wait for the prometheus rule to be recreated
-				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
-			})
-		})
 		When("the alertmanager resource is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
 				// Get an updated alertmanager
@@ -770,6 +761,18 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Create(ctx, dmsSecret)).Should(Succeed())
 
 				utils.WaitForResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("the dms prometheus rule resource is deleted", func() {
+			It("should create a new dms prometheus rule in the namespace", func() {
+				// Ensure prometheus rule existed to begin with
+				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
+
+				// Delete the prometheus rule resource
+				Expect(k8sClient.Delete(ctx, dmsPromRuleTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the prometheus rule to be recreated
+				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("there is a pod monitor without an ocs-dedicated label", func() {

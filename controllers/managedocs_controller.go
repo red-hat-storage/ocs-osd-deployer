@@ -165,6 +165,15 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		),
 	)
+	prometheusRulesPredicates := builder.WithPredicates(
+		predicate.NewPredicateFuncs(
+			func(meta metav1.Object, _ runtime.Object) bool {
+				name := meta.GetName()
+				labels := meta.GetLabels()
+				return labels == nil || labels[monLabelKey] != monLabelValue || name == dmsRuleName
+			},
+		),
+	)
 	enqueueManangedOCSRequest := handler.EnqueueRequestsFromMapFunc{
 		ToRequests: handler.ToRequestsFunc(
 			func(obj handler.MapObject) []reconcile.Request {
@@ -212,7 +221,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &promv1.PrometheusRule{}},
 			&enqueueManangedOCSRequest,
-			monResourcesPredicates,
+			prometheusRulesPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &appsv1.StatefulSet{}},
@@ -312,6 +321,10 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
+	// Uninstallation depends on the status of the components.
+	// We are checking the uninstallation condition before getting the component status
+	// to mitigate scenarios where changes to the component status occurs while the uninstallation logic is running.
+	initiateUninstall := r.checkUninstallCondition()
 	// Update the status of the components
 	r.updateComponentStatus()
 
@@ -359,11 +372,14 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileMonitoringResources(); err != nil {
 			return ctrl.Result{}, err
 		}
+		if err := r.reconcileDMSPrometheusRule(); err != nil {
+			return ctrl.Result{}, err
+		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
 
 		// Check if we need and can uninstall
-		if r.checkUninstallCondition() && r.areComponentsReadyForUninstall() {
+		if initiateUninstall && r.areComponentsReadyForUninstall() {
 			found, err := r.findOCSVolumeClaims()
 			if err != nil {
 				return ctrl.Result{}, err
@@ -379,7 +395,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			}
 		}
 
-	} else if r.checkUninstallCondition() {
+	} else if initiateUninstall {
 		return ctrl.Result{}, r.removeOLMComponents()
 	}
 
@@ -574,7 +590,13 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 		return err
 	}
 
-	_, err = ctrl.CreateOrUpdate(r.ctx, r.Client, r.dmsRule, func() error {
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileDMSPrometheusRule() error {
+	r.Log.Info("Reconciling DMS Prometheus Rule")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.dmsRule, func() error {
 		if err := r.own(r.dmsRule); err != nil {
 			return err
 		}
@@ -653,88 +675,65 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfigSecret() error {
 // This function produces that yaml file.
 // To sanitize the input the yaml is first represented as types in golang.
 func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey string, dmsURL string) interface{} {
-
-	type webhookConfig struct {
-		URL string `yaml:"url,omitempty"`
+	type PagerDutyConfig struct {
+		ServiceKey string `yaml:"service_key"`
 	}
 
-	type pagerdutyConfig struct {
-		ServiceKey string `yaml:"service_key,omitempty"`
+	type WebhookConfig struct {
+		Url string `yaml:"url"`
 	}
 
-	type route struct {
-		Receiver       string            `yaml:"receiver,omitempty"`
-		Match          map[string]string `yaml:"match,omitempty"`
-		Routes         []*route          `yaml:"routes,omitempty"`
-		GroupWait      string            `yaml:"group_wait,omitempty"`
-		GroupInterval  string            `yaml:"group_interval,omitempty"`
-		RepeatInterval string            `yaml:"repeat_interval,omitempty"`
-	}
+	alertmanagerConfig := struct {
+		Route struct {
+			GroupWait      string `yaml:"group_wait,omitempty"`
+			GroupInterval  string `yaml:"group_interval,omitempty"`
+			RepeatInterval string `yaml:"repeat_interval,omitempty"`
+			Receiver       string `yaml:"receiver,omitempty"`
+			Routes         [2]struct {
+				GroupWait      string            `yaml:"group_wait,omitempty"`
+				GroupInterval  string            `yaml:"group_interval,omitempty"`
+				RepeatInterval string            `yaml:"repeat_interval,omitempty"`
+				Receiver       string            `yaml:"receiver,omitempty"`
+				Match          map[string]string `yaml:"match,omitempty"`
+			} `yaml:"routes"`
+		} `yaml:"route"`
+		Receivers [2]struct {
+			Name             string            `yaml:"name"`
+			PagerdutyConfigs []PagerDutyConfig `yaml:"pagerduty_configs,omitempty"`
+			WebhookConfigs   []WebhookConfig   `yaml:"webhook_configs,omitempty"`
+		} `yaml:"receivers"`
+	}{}
 
-	type receiver struct {
-		Name             string             `yaml:"name"`
-		PagerdutyConfigs []*pagerdutyConfig `yaml:"pagerduty_configs,omitempty"`
-		WebhookConfigs   []*webhookConfig   `yaml:"webhook_configs,omitempty"`
-	}
+	alertmanagerConfig.Route.Receiver = "pagerduty"
 
-	type alertmanagerConfig struct {
-		Route     *route      `yaml:"route,omitempty"`
-		Receivers []*receiver `yaml:"receivers,omitempty"`
-	}
+	alertmanagerConfig.Route.Routes[0].GroupWait = "30s"
+	alertmanagerConfig.Route.Routes[0].GroupInterval = "5m"
+	alertmanagerConfig.Route.Routes[0].RepeatInterval = "4h"
+	alertmanagerConfig.Route.Routes[0].Receiver = "pagerduty"
+	alertmanagerConfig.Route.Routes[0].Match = make(map[string]string)
+	alertmanagerConfig.Route.Routes[0].Match["severity"] = "critical"
 
-	amConfig := alertmanagerConfig{
-		Route: &route{
-			Receiver: "deadmanssnitch",
-			Routes: []*route{
-				&route{
-					Receiver:       "pagerduty",
-					GroupWait:      "30s",
-					GroupInterval:  "5m",
-					RepeatInterval: "4h",
-					Match: map[string]string{
-						"severity": "critical",
-					},
-				},
-				&route{
-					Receiver:       "deadmanssnitch",
-					GroupWait:      "5m",
-					GroupInterval:  "5m",
-					RepeatInterval: "5m",
-					Match: map[string]string{
-						"alertname": "DeadMansSnitch",
-					},
-				},
-			},
-		},
-		Receivers: []*receiver{
-			&receiver{
-				Name: "default-receiver",
-			},
-			&receiver{
-				Name: "pagerduty",
-				PagerdutyConfigs: []*pagerdutyConfig{
-					&pagerdutyConfig{
-						ServiceKey: pagerdutyServiceKey,
-					},
-				},
-			},
-			&receiver{
-				Name: "deadmanssnitch",
-				WebhookConfigs: []*webhookConfig{
-					&webhookConfig{
-						URL: dmsURL,
-					},
-				},
-			},
-		},
-	}
+	alertmanagerConfig.Route.Routes[1].GroupWait = "5m"
+	alertmanagerConfig.Route.Routes[1].GroupInterval = "5m"
+	alertmanagerConfig.Route.Routes[1].RepeatInterval = "5m"
+	alertmanagerConfig.Route.Routes[1].Receiver = "deadmanssnitch"
+	alertmanagerConfig.Route.Routes[1].Match = make(map[string]string)
+	alertmanagerConfig.Route.Routes[1].Match["alertname"] = "deadmanssnitch"
 
-	return &amConfig
+	alertmanagerConfig.Receivers[0].Name = "pagerduty"
+	alertmanagerConfig.Receivers[0].PagerdutyConfigs = []PagerDutyConfig{{}}
+	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].ServiceKey = pagerdutyServiceKey
+
+	alertmanagerConfig.Receivers[1].Name = "deadmanssnitch"
+	alertmanagerConfig.Receivers[1].WebhookConfigs = []WebhookConfig{{}}
+	alertmanagerConfig.Receivers[1].WebhookConfigs[0].Url = dmsURL
+
+	return &alertmanagerConfig
 }
 
 // reconcileMonitoringResources labels all monitoring resources (ServiceMonitors, PodMonitors, and PrometheusRules)
 // found in the target namespace with a label that matches the label selector the defined on the Prometheus resource
-// we are reconciling in reconcilePrometheus. Doing so instructcs the Prometheus instance to notice and react to these labeled
+// we are reconciling in reconcilePrometheus. Doing so instructs the Prometheus instance to notice and react to these labeled
 // monitoring resources
 func (r *ManagedOCSReconciler) reconcileMonitoringResources() error {
 	r.Log.Info("reconciling monitoring resources")
