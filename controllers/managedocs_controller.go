@@ -115,24 +115,13 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	managedOCSPredicates := builder.WithPredicates(
 		predicate.GenerationChangedPredicate{},
 	)
-	addonParamsSecretPredicates := builder.WithPredicates(
+	secretPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
 			func(meta metav1.Object, _ runtime.Object) bool {
-				return meta.GetName() == r.AddonParamSecretName
-			},
-		),
-	)
-	pagerdutySecretPredicates := builder.WithPredicates(
-		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				return meta.GetName() == r.PagerdutySecretName
-			},
-		),
-	)
-	deadMansSnitchSecretPredicates := builder.WithPredicates(
-		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				return meta.GetName() == r.DeadMansSnitchSecretName
+				name := meta.GetName()
+				return name == r.AddonParamSecretName ||
+					name == r.PagerdutySecretName ||
+					name == r.DeadMansSnitchSecretName
 			},
 		),
 	)
@@ -201,7 +190,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &corev1.Secret{}},
 			&enqueueManangedOCSRequest,
-			addonParamsSecretPredicates,
+			secretPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &corev1.ConfigMap{}},
@@ -227,16 +216,6 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &appsv1.StatefulSet{}},
 			&enqueueManangedOCSRequest,
 			monStatefulSetPredicates,
-		).
-		Watches(
-			&source.Kind{Type: &corev1.Secret{}},
-			&enqueueManangedOCSRequest,
-			pagerdutySecretPredicates,
-		).
-		Watches(
-			&source.Kind{Type: &corev1.Secret{}},
-			&enqueueManangedOCSRequest,
-			deadMansSnitchSecretPredicates,
 		).
 
 		// Create the controller
