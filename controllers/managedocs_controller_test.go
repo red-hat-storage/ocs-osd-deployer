@@ -47,6 +47,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	dmsPromRuleTemplate := promv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dmsRuleName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 	promStsTemplate := appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("prometheus-%s", prometheusName),
@@ -119,6 +125,13 @@ var _ = Describe("ManagedOCS controller", func() {
 	pdSecretTemplate := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testPagerdutySecretName,
+			Namespace: testPrimaryNamespace,
+		},
+		Data: map[string][]byte{},
+	}
+	dmsSecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testDeadMansSnitchSecretName,
 			Namespace: testPrimaryNamespace,
 		},
 		Data: map[string][]byte{},
@@ -695,6 +708,18 @@ var _ = Describe("ManagedOCS controller", func() {
 				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
 			})
 		})
+		When("there is no deadmanssnitch secret in the cluster", func() {
+			It("should not create alertmanager config secret", func() {
+				// Verify that a deadman's snitch secret is not present
+				secret := dmsSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
+					WithTransform(errors.IsNotFound, BeTrue()),
+				)
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+			})
+		})
 		When("there is no value for PAGERDUTY_KEY in the pagerduty secret", func() {
 			It("should not create alertmanager config secret", func() {
 				// Create empty pagerduty secret
@@ -708,15 +733,46 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 			})
 		})
-		When("there is a value for PAGERDUTY_KEY in the pagerduty secret", func() {
-			It("should create alertmanager config secret", func() {
-				// Create pagerduty secret with valid key
-				secret := pdSecretTemplate.DeepCopy()
-				secret.Data["PAGERDUTY_KEY"] = []byte("test-key")
-				By("Creating an alertmanager config secret")
+		When("there is no value for SNITCH_URL in the deadmanssnitch secret", func() {
+			It("should not create alertmanager config secret", func() {
+				// Create empty deadman's snitch secret
+				secret := dmsSecretTemplate.DeepCopy()
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+
+				// Remove the secret for future cases
+				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+			})
+		})
+		When("there is a value for PAGERDUTY_KEY in the pagerduty secret and a value for SNITCH_URL in the deadmanssnitch secret", func() {
+			It("should create alertmanager config secret", func() {
+				// Create pagerduty secret with valid key
+				pdSecret := pdSecretTemplate.DeepCopy()
+				pdSecret.Data["PAGERDUTY_KEY"] = []byte("test-key")
+
+				// Create deadman's snitch secret with a valid key
+				dmsSecret := dmsSecretTemplate.DeepCopy()
+				dmsSecret.Data["SNITCH_URL"] = []byte("test-key")
+
+				By("Creating an alertmanager config secret")
+				Expect(k8sClient.Create(ctx, pdSecret)).Should(Succeed())
+				Expect(k8sClient.Create(ctx, dmsSecret)).Should(Succeed())
+
 				utils.WaitForResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("the dms prometheus rule resource is deleted", func() {
+			It("should create a new dms prometheus rule in the namespace", func() {
+				// Ensure prometheus rule existed to begin with
+				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
+
+				// Delete the prometheus rule resource
+				Expect(k8sClient.Delete(ctx, dmsPromRuleTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the prometheus rule to be recreated
+				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("there is a pod monitor without an ocs-dedicated label", func() {
