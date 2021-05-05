@@ -3,7 +3,6 @@ package readiness
 import (
 	"context"
 	"net/http"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,67 +11,103 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("ManagedOCS Readiness Probe", func() {
-	// Define utility constants for object names and testing timeouts/durations and intervals.
-	const (
-		timeout  = time.Second * 10
-		duration = time.Second * 10
-		interval = time.Millisecond * 250
-	)
+var _ = Describe("ManagedOCS readiness probe behavior", func() {
+	ctx := context.Background()
 
-	When("managedocs reports its components as \"not ready\"", func() {
-		BeforeEach(func() {
-			ctx := context.Background()
+	managedOCS := &v1.ManagedOCS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ManagedOCSName,
+			Namespace: TestNamespace,
+		},
+	}
 
-			managedOCS := &v1.ManagedOCS{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      ManagedOCSName,
-					Namespace: TestNamespace,
+	setupReadinessConditions := func(
+		storageClusterReady bool,
+		prometheusReady bool,
+		alertmanagerReady bool,
+	) error {
+
+		var scStatus, prometheusStatus, alertmanagerStatus v1.ComponentState
+
+		if storageClusterReady == true {
+			scStatus = v1.ComponentReady
+		} else {
+			scStatus = v1.ComponentPending
+		}
+
+		if prometheusReady == true {
+			prometheusStatus = v1.ComponentReady
+		} else {
+			prometheusStatus = v1.ComponentPending
+		}
+
+		if alertmanagerReady == true {
+			alertmanagerStatus = v1.ComponentReady
+		} else {
+			alertmanagerStatus = v1.ComponentPending
+		}
+
+		if err := k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS); err != nil {
+			return err
+		}
+
+		managedOCS.Status = v1.ManagedOCSStatus{
+			Components: v1.ComponentStatusMap{
+				StorageCluster: v1.ComponentStatus{
+					State: scStatus,
 				},
-				Status: v1.ManagedOCSStatus{
-					Components: v1.ComponentStatusMap{
-						StorageCluster: v1.ComponentStatus{
-							State: v1.ComponentPending,
-						},
-					},
+				Prometheus: v1.ComponentStatus{
+					State: prometheusStatus,
 				},
-			}
-
-			Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
-
-			utils.WaitForResource(k8sClient, ctx, managedOCS, timeout, interval)
-		})
-
-		It("should cause the readiness logic to report \"not ready\"", func() {
-			status, err := utils.ProbeReadiness()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(status).To(Equal(http.StatusServiceUnavailable))
-		})
-	})
-
-	When("managedocs reports its components as \"ready\"", func() {
-		BeforeEach(func() {
-			ctx := context.Background()
-			managedOCS := &v1.ManagedOCS{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      ManagedOCSName,
-					Namespace: TestNamespace,
+				Alertmanager: v1.ComponentStatus{
+					State: alertmanagerStatus,
 				},
-			}
+			},
+		}
 
-			// This test expects the ManagedOCS resource to already have been made.
-			err := k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)
-			Expect(err).ToNot(HaveOccurred())
+		return k8sClient.Status().Update(ctx, managedOCS)
+	}
 
-			managedOCS.Status.Components.StorageCluster.State = v1.ComponentReady
+	Context("Readiness Probe", func() {
+		When("the managedocs resource lists its StorageCluster as not \"ready\"", func() {
+			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
+				Expect(setupReadinessConditions(false, true, true)).Should(Succeed())
 
-			Expect(k8sClient.Status().Update(ctx, managedOCS)).Should(Succeed())
+				status, err := utils.ProbeReadiness()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(status).To(Equal(http.StatusServiceUnavailable))
+			})
 		})
 
-		It("should cause the readiness logic to report \"ready\"", func() {
-			status, err := utils.ProbeReadiness()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(status).To(Equal(http.StatusOK))
+		When("managedocs reports Prometheus as not \"ready\"", func() {
+			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
+				Expect(setupReadinessConditions(true, false, true)).Should(Succeed())
+
+				status, err := utils.ProbeReadiness()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(status).To(Equal(http.StatusServiceUnavailable))
+			})
 		})
+
+		When("managedocs reports Alertmanager as not \"ready\"", func() {
+			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
+				Expect(setupReadinessConditions(true, true, false)).Should(Succeed())
+
+				status, err := utils.ProbeReadiness()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(status).To(Equal(http.StatusServiceUnavailable))
+			})
+		})
+
+		When("managedocs reports all its components as \"ready\"", func() {
+			It("should cause the readiness probe to return StatusOK", func() {
+				Expect(setupReadinessConditions(true, true, true)).Should(Succeed())
+
+				status, err := utils.ProbeReadiness()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(status).To(Equal(http.StatusOK))
+			})
+		})
+
 	})
 })

@@ -17,11 +17,14 @@ limitations under the License.
 package readiness
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -44,6 +47,11 @@ import (
 const (
 	ManagedOCSName = "test-managedocs"
 	TestNamespace  = "default"
+
+	// Define utility constants for object names and testing timeouts/durations and intervals.
+	timeout  = time.Second * 10
+	duration = time.Second * 10
+	interval = time.Millisecond * 250
 )
 
 var cfg *rest.Config
@@ -61,7 +69,6 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
-	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
@@ -89,11 +96,30 @@ var _ = BeforeSuite(func(done Done) {
 
 	go RunServer(k8sClient, types.NamespacedName{Name: ManagedOCSName, Namespace: TestNamespace}, ctrl.Log.WithName("readiness"))
 
+	ctx := context.Background()
+
+	managedOCS := &v1.ManagedOCS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ManagedOCSName,
+			Namespace: TestNamespace,
+		},
+	}
+	Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
+
 	close(done)
 }, 60)
 
 var _ = AfterSuite(func() {
-	By("tearing down the test environment")
+	ctx := context.Background()
+
+	managedOCS := &v1.ManagedOCS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ManagedOCSName,
+			Namespace: TestNamespace,
+		},
+	}
+	Expect(k8sClient.Delete(ctx, managedOCS)).Should(Succeed())
+
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
