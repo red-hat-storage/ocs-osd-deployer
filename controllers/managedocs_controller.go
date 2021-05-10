@@ -100,6 +100,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources={managedocs,managedocs/finalizers},verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=managedocs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=storageclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=ocsinitializations,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={alertmanagers,prometheuses},verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=prometheusrules,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={podmonitors,servicemonitors},verbs=get;list;watch;update;patch
@@ -217,6 +218,10 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &appsv1.StatefulSet{}},
 			&enqueueManangedOCSRequest,
 			monStatefulSetPredicates,
+		).
+		Watches(
+			&source.Kind{Type: &ocsv1.OCSInitialization{}},
+			&enqueueManangedOCSRequest,
 		).
 
 		// Create the controller
@@ -353,6 +358,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileDMSPrometheusRule(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileOCSInitialization(); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -591,6 +599,27 @@ func (r *ManagedOCSReconciler) reconcileDMSPrometheusRule() error {
 		return err
 	}
 
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileOCSInitialization() error {
+	r.Log.Info("Reconciling OCSInitialization")
+
+	ocsInitList := ocsv1.OCSInitializationList{}
+	if err := r.list(&ocsInitList); err != nil {
+		return fmt.Errorf("Could to list OCSInitialization resources: %v", err)
+	}
+	if len(ocsInitList.Items) == 0 {
+		r.Log.V(-1).Info("OCSInitialization resource not found")
+	} else {
+		obj := &ocsInitList.Items[0]
+		if !obj.Spec.EnableCephTools {
+			obj.Spec.EnableCephTools = true
+			if err := r.update(obj); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

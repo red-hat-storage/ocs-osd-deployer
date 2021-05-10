@@ -197,6 +197,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	ocsInitializationTemplate := ocsv1.OCSInitialization{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ocsinit",
+			Namespace: testPrimaryNamespace,
+		},
+	}
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -803,6 +809,36 @@ var _ = Describe("ManagedOCS controller", func() {
 				Eventually(func() bool {
 					return utils.ResourceHasLabel(k8sClient, ctx, pr, monLabelKey, monLabelValue)
 				}, timeout, interval).Should(BeTrue())
+			})
+		})
+		When("the ocsInitialization resource is created", func() {
+			It("should patch the ocsInitialization to enable ceph toolbox", func() {
+				ocsInit := ocsInitializationTemplate.DeepCopy()
+				Expect(k8sClient.Create(ctx, ocsInit)).Should(Succeed())
+
+				ocsInitKey := utils.GetResourceKey(ocsInit)
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() bool {
+					Expect(k8sClient.Get(ctx, ocsInitKey, ocsInit)).Should(Succeed())
+					return ocsInit.Spec.EnableCephTools
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the ocsInitialization resource is modified", func() {
+			It("should revert the changes in ocsInitialization to enable ceph toolbox", func() {
+				ocsInit := ocsInitializationTemplate.DeepCopy()
+				ocsInitKey := utils.GetResourceKey(ocsInit)
+				Expect(k8sClient.Get(ctx, ocsInitKey, ocsInit)).Should(Succeed())
+
+				ocsInit.Spec.EnableCephTools = false
+				Expect(k8sClient.Update(ctx, ocsInit)).Should(Succeed())
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() bool {
+					Expect(k8sClient.Get(ctx, ocsInitKey, ocsInit)).Should(Succeed())
+					return ocsInit.Spec.EnableCephTools
+				}, timeout, interval).Should(Equal(true))
 			})
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {
