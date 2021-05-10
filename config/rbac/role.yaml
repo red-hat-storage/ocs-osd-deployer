@@ -57,9 +57,19 @@ rules:
   - monitoring.coreos.com
   resources:
   - podmonitors
-  - prometheusrules
   - servicemonitors
   verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - prometheusrules
+  verbs:
+  - create
   - get
   - list
   - patch
