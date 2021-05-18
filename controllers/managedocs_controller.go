@@ -696,15 +696,15 @@ func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey st
 	alertmanagerConfig.Route.Routes[1].GroupWait = "5m"
 	alertmanagerConfig.Route.Routes[1].GroupInterval = "5m"
 	alertmanagerConfig.Route.Routes[1].RepeatInterval = "5m"
-	alertmanagerConfig.Route.Routes[1].Receiver = "deadmanssnitch"
+	alertmanagerConfig.Route.Routes[1].Receiver = "DeadMansSnitch"
 	alertmanagerConfig.Route.Routes[1].Match = make(map[string]string)
-	alertmanagerConfig.Route.Routes[1].Match["alertname"] = "deadmanssnitch"
+	alertmanagerConfig.Route.Routes[1].Match["alertname"] = "DeadMansSnitch"
 
 	alertmanagerConfig.Receivers[0].Name = "pagerduty"
 	alertmanagerConfig.Receivers[0].PagerdutyConfigs = []PagerDutyConfig{{}}
 	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].ServiceKey = pagerdutyServiceKey
 
-	alertmanagerConfig.Receivers[1].Name = "deadmanssnitch"
+	alertmanagerConfig.Receivers[1].Name = "DeadMansSnitch"
 	alertmanagerConfig.Receivers[1].WebhookConfigs = []WebhookConfig{{}}
 	alertmanagerConfig.Receivers[1].WebhookConfigs[0].Url = dmsURL
 
