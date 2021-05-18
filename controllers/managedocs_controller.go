@@ -82,6 +82,7 @@ type ManagedOCSReconciler struct {
 	DeployerSubscriptionName     string
 	PagerdutySecretName          string
 	DeadMansSnitchSecretName     string
+	SOPEndpoint                  string
 
 	ctx                      context.Context
 	managedOCS               *v1.ManagedOCS
@@ -657,7 +658,8 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfigSecret() error {
 // To sanitize the input the yaml is first represented as types in golang.
 func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey string, dmsURL string) interface{} {
 	type PagerDutyConfig struct {
-		ServiceKey string `yaml:"service_key"`
+		ServiceKey string            `yaml:"service_key"`
+		Details    map[string]string `yaml:"details"`
 	}
 
 	type WebhookConfig struct {
@@ -675,6 +677,7 @@ func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey st
 				GroupInterval  string            `yaml:"group_interval,omitempty"`
 				RepeatInterval string            `yaml:"repeat_interval,omitempty"`
 				Receiver       string            `yaml:"receiver,omitempty"`
+				GroupBy        []string          `yaml:"group_by,omitempty"`
 				Match          map[string]string `yaml:"match,omitempty"`
 			} `yaml:"routes"`
 		} `yaml:"route"`
@@ -693,6 +696,7 @@ func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey st
 	alertmanagerConfig.Route.Routes[0].Receiver = "pagerduty"
 	alertmanagerConfig.Route.Routes[0].Match = make(map[string]string)
 	alertmanagerConfig.Route.Routes[0].Match["severity"] = "critical"
+	alertmanagerConfig.Route.Routes[0].GroupBy = []string{"alertname"}
 
 	alertmanagerConfig.Route.Routes[1].GroupWait = "5m"
 	alertmanagerConfig.Route.Routes[1].GroupInterval = "5m"
@@ -704,6 +708,9 @@ func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey st
 	alertmanagerConfig.Receivers[0].Name = "pagerduty"
 	alertmanagerConfig.Receivers[0].PagerdutyConfigs = []PagerDutyConfig{{}}
 	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].ServiceKey = pagerdutyServiceKey
+	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].Details = map[string]string{
+		"SOP": r.SOPEndpoint,
+	}
 
 	alertmanagerConfig.Receivers[1].Name = "DeadMansSnitch"
 	alertmanagerConfig.Receivers[1].WebhookConfigs = []WebhookConfig{{}}
