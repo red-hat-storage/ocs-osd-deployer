@@ -44,8 +44,9 @@ import (
 )
 
 const (
-	namespaceEnvVarName = "NAMESPACE"
-	addonNameEnvVarName = "ADDON_NAME"
+	namespaceEnvVarName   = "NAMESPACE"
+	addonNameEnvVarName   = "ADDON_NAME"
+	sopEndpointEnvVarName = "SOP_ENDPOINT"
 )
 
 var (
@@ -118,6 +119,7 @@ func main() {
 		DeployerSubscriptionName:     fmt.Sprintf("addon-%v", addonName),
 		PagerdutySecretName:          fmt.Sprintf("%v-pagerduty", addonName),
 		DeadMansSnitchSecretName:     fmt.Sprintf("%v-deadmanssnitch", addonName),
+		SOPEndpoint:                  envVars[sopEndpointEnvVarName],
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -164,6 +166,12 @@ func readEnvVars() (map[string]string, error) {
 		return nil, fmt.Errorf("%s environment variable must be set", addonNameEnvVarName)
 	}
 	envVars[addonNameEnvVarName] = val
+
+	val, found = os.LookupEnv(sopEndpointEnvVarName)
+	if !found {
+		return nil, fmt.Errorf("%s environment variable must be set", sopEndpointEnvVarName)
+	}
+	envVars[sopEndpointEnvVarName] = val
 
 	return envVars, nil
 }

@@ -42,6 +42,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: ADDON_NAME
+        - name: SOP_ENDPOINT
       - name: readiness-server
         command:
         - /readinessServer
