@@ -28,7 +28,7 @@ all: manager readinessServer
 export_env_vars:
 export NAMESPACE = openshift-storage
 export ADDON_NAME = ocs-converged
-export SOP_ENDPOINT = "https://red-hat-storage.github.io/ocs-sop/sop/OSD/{{ .GroupLabels.alertname }}.html"
+export SOP_ENDPOINT = https://red-hat-storage.github.io/ocs-sop/sop/OSD/{{ .GroupLabels.alertname }}.html
 
 # Run tests
 ENVTEST_ASSETS_DIR = $(shell pwd)/testbin
