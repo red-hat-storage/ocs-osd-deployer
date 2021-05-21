@@ -100,6 +100,16 @@ rules:
 - apiGroups:
   - ocs.openshift.io
   resources:
+  - ocsinitializations
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ocs.openshift.io
+  resources:
   - storageclusters
   verbs:
   - create
