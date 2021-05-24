@@ -18,8 +18,7 @@ package templates
 
 import (
 	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"github.com/openshift/ocs-osd-deployer/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -45,11 +44,6 @@ var PrometheusTemplate = promv1.Prometheus{
 				Port:      intstr.FromString("web"),
 			}},
 		},
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				"cpu":    resource.MustParse("1"),
-				"memory": resource.MustParse("200Mi"),
-			},
-		},
+		Resources: utils.GetResourceRequirements("prometheus"),
 	},
 }
