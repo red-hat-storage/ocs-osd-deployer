@@ -9,7 +9,9 @@ bin
 ocs-osd-deployer
 
 # Generated bundle and manifests
+bundle.Dockerfile
 bundle
+tools/bundle
 
 # Test binary, build with `go test -c`
 *.test
