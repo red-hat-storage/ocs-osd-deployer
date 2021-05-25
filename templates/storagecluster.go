@@ -18,6 +18,7 @@ package templates
 
 import (
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
+	"github.com/openshift/ocs-osd-deployer/utils"
 	rook "github.com/rook/rook/pkg/apis/rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -51,36 +52,9 @@ var StorageClusterTemplate = ocsv1.StorageCluster{
 			},
 		},
 		Resources: map[string]corev1.ResourceRequirements{
-			"mds": {
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("3000m"),
-					"memory": resource.MustParse("8Gi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("1000m"),
-					"memory": resource.MustParse("8Gi"),
-				},
-			},
-			"mgr": {
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("1000m"),
-					"memory": resource.MustParse("3Gi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("1000m"),
-					"memory": resource.MustParse("3Gi"),
-				},
-			},
-			"mon": {
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("1000m"),
-					"memory": resource.MustParse("2Gi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("1000m"),
-					"memory": resource.MustParse("2Gi"),
-				},
-			},
+			"mds": utils.GetResourceRequirements("mds"),
+			"mgr": utils.GetResourceRequirements("mgr"),
+			"mon": utils.GetResourceRequirements("mon"),
 		},
 		StorageDeviceSets: []ocsv1.StorageDeviceSet{{
 			Name:  "default",
@@ -102,16 +76,7 @@ var StorageClusterTemplate = ocsv1.StorageCluster{
 			Placement: rook.Placement{},
 			Portable:  true,
 			Replica:   3,
-			Resources: corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("2000m"),
-					"memory": resource.MustParse("5Gi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("1000m"),
-					"memory": resource.MustParse("5Gi"),
-				},
-			},
+			Resources: utils.GetResourceRequirements("sds"),
 		}},
 		MultiCloudGateway: &ocsv1.MultiCloudGatewaySpec{
 			ReconcileStrategy: "ignore",
