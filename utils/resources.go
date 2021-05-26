@@ -70,6 +70,92 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 			"memory": resource.MustParse("200Mi"),
 		},
 	},
+
+	// Note: These values come from the example rook-ceph-operator-config, found here:
+	// https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/operator.yaml#L123-L270
+	"csi-provisioner": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("128Mi"),
+			"cpu":    resource.MustParse("100m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("256Mi"),
+			"cpu":    resource.MustParse("200m"),
+		},
+	},
+
+	"csi-resizer": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("128Mi"),
+			"cpu":    resource.MustParse("100m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("256Mi"),
+			"cpu":    resource.MustParse("200m"),
+		},
+	},
+
+	"csi-attacher": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("128Mi"),
+			"cpu":    resource.MustParse("100m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("256Mi"),
+			"cpu":    resource.MustParse("200m"),
+		},
+	},
+
+	"csi-snapshotter": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("128Mi"),
+			"cpu":    resource.MustParse("100m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("256Mi"),
+			"cpu":    resource.MustParse("200m"),
+		},
+	},
+
+	"csi-rbdplugin": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("512Mi"),
+			"cpu":    resource.MustParse("250m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("1Gi"),
+			"cpu":    resource.MustParse("500m"),
+		},
+	},
+
+	"liveness-prometheus": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("128Mi"),
+			"cpu":    resource.MustParse("50m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("256Mi"),
+			"cpu":    resource.MustParse("100m"),
+		},
+	},
+
+	"driver-registrar": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("128Mi"),
+			"cpu":    resource.MustParse("50m"),
+		},
+		Limits: corev1.ResourceList{
+			"memory": resource.MustParse("256Mi"),
+			"cpu":    resource.MustParse("100m"),
+		},
+	},
+
+	"csi-cephfsplugin": {
+		Requests: corev1.ResourceList{
+			"memory": resource.MustParse("512Mi"),
+			"cpu":    resource.MustParse("250m"),
+		},
+	},
 }
 
 func GetResourceRequirements(name string) corev1.ResourceRequirements {

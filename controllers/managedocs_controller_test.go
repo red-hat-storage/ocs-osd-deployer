@@ -149,6 +149,15 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	rookConfigMapTemplate := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "rook-ceph-operator-config",
+			Namespace: testPrimaryNamespace,
+		},
+		Data: map[string]string{
+			"test-key": "test-value",
+		},
+	}
 	pvc1StorageClassName := storageClassRbdName
 	pvc1Template := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -363,6 +372,32 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 			})
 		})
+		When("there is a rook-ceph-operator-config ConfigMap", func() {
+			It("should ensure there are RBD CSI resource limits", func() {
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Expect(k8sClient.Create(ctx, configMap)).Should(Succeed())
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)
+					if err != nil {
+						return false
+					}
+
+					return configMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != "" &&
+						configMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != "" &&
+						configMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != "" &&
+						configMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != ""
+
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			It("should not modify unrelated configurations", func() {
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)).Should(Succeed())
+
+				Expect(configMap.Data["test-key"]).Should(Equal("test-value"))
+			})
+		})
 		When("there is a valid size in the add-on parameter secret", func() {
 			It("should create reconciled resources", func() {
 				// Create a valid add-on parameters secret
@@ -373,11 +408,40 @@ var _ = Describe("ManagedOCS controller", func() {
 				By("Creating a storagecluster resource")
 				utils.WaitForResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
 
-				By("Creating a prometous resource")
+				By("Creating a prometheus resource")
 				utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
 
 				By("Creating an alertmanager resource")
 				utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is no rook-ceph-operator-config ConfigMap", func() {
+			It("should not create reconciled resources", func() {
+				resList := []runtime.Object{
+					scTemplate.DeepCopy(),
+					promTemplate.DeepCopy(),
+					amTemplate.DeepCopy(),
+				}
+
+				// Delete existing resources
+				for _, object := range resList {
+					Expect(k8sClient.Delete(ctx, object)).Should(Succeed())
+				}
+
+				// Ensure there is no rook-ceph-operator-config ConfigMap present
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Expect(k8sClient.Delete(ctx, configMap)).Should(Succeed())
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
+
+				// Recreate the configMap for other tests.
+				Expect(k8sClient.Create(ctx, configMap)).Should(Succeed())
+
+				// Ensure resources get created again so that other tests work properly
+				for _, object := range resList {
+					utils.WaitForResource(k8sClient, ctx, object, timeout, interval)
+				}
 			})
 		})
 		When("size is increased in the add-on parameters secret", func() {
