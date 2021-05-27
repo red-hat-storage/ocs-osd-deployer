@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v2"
+	"k8s.io/apimachinery/pkg/api/equality"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -65,6 +66,7 @@ const (
 	storageClassRbdName          = "ocs-storagecluster-ceph-rbd"
 	storageClassCephFSName       = "ocs-storagecluster-cephfs"
 	deployerCSVPrefix            = "ocs-osd-deployer"
+	ocsOperatorName              = "ocs-operator"
 	monLabelKey                  = "app"
 	monLabelValue                = "managed-ocs"
 	rookConfigMapName            = "rook-ceph-operator-config"
@@ -107,7 +109,8 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=prometheusrules,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={podmonitors,servicemonitors},verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
-// +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources={subscriptions,clusterserviceversions},verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=subscriptions,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
 
@@ -170,6 +173,13 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		),
 	)
+	ocsCSVPredicates := builder.WithPredicates(
+		predicate.NewPredicateFuncs(
+			func(meta metav1.Object, _ runtime.Object) bool {
+				return strings.HasPrefix(meta.GetName(), ocsOperatorName)
+			},
+		),
+	)
 	enqueueManangedOCSRequest := handler.EnqueueRequestsFromMapFunc{
 		ToRequests: handler.ToRequestsFunc(
 			func(obj handler.MapObject) []reconcile.Request {
@@ -227,6 +237,11 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &ocsv1.OCSInitialization{}},
 			&enqueueManangedOCSRequest,
+		).
+		Watches(
+			&source.Kind{Type: &opv1a1.ClusterServiceVersion{}},
+			&enqueueManangedOCSRequest,
+			ocsCSVPredicates,
 		).
 
 		// Create the controller
@@ -351,6 +366,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileStorageCluster(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileOCSCSV(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcilePrometheus(); err != nil {
@@ -839,6 +857,53 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 	return false, nil
 }
 
+func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
+	csvList := opv1a1.ClusterServiceVersionList{}
+	if err := r.list(&csvList); err != nil {
+		return fmt.Errorf("unable to list csv resources: %v", err)
+	}
+
+	csv := getCSVByPrefix(csvList, ocsOperatorName)
+	if csv == nil {
+		return fmt.Errorf("OCS CSV not found")
+	}
+	var isChanged bool
+	deployments := csv.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
+	for i := range deployments {
+		containers := deployments[i].Spec.Template.Spec.Containers
+		for j := range containers {
+			switch container := &containers[j]; container.Name {
+			case "ocs-operator":
+				resources := utils.GetResourceRequirements("ocs-operator")
+				if !equality.Semantic.DeepEqual(container.Resources, resources) {
+					container.Resources = resources
+					isChanged = true
+				}
+			case "rook-ceph-operator":
+				resources := utils.GetResourceRequirements("rook-ceph-operator")
+				if !equality.Semantic.DeepEqual(container.Resources, resources) {
+					container.Resources = resources
+					isChanged = true
+				}
+			case "ocs-metrics-exporter":
+				resources := utils.GetResourceRequirements("ocs-metrics-exporter")
+				if !equality.Semantic.DeepEqual(container.Resources, resources) {
+					container.Resources = resources
+					isChanged = true
+				}
+			default:
+				r.Log.V(-1).Info("Could not find resource requirement", "Resource", container.Name)
+			}
+		}
+	}
+	if isChanged {
+		if err := r.update(csv); err != nil {
+			return fmt.Errorf("Failed to update OCS CSV with resource requirements: %v", err)
+		}
+	}
+	return nil
+}
+
 func (r *ManagedOCSReconciler) removeOLMComponents() error {
 
 	r.Log.Info("Deleting subscription")
@@ -856,14 +921,7 @@ func (r *ManagedOCSReconciler) removeOLMComponents() error {
 		return fmt.Errorf("unable to list csv resources: %v", err)
 	}
 
-	var csv *opv1a1.ClusterServiceVersion = nil
-	for index := range csvList.Items {
-		candidate := &csvList.Items[index]
-		if strings.HasPrefix(candidate.Name, deployerCSVPrefix) {
-			csv = candidate
-			break
-		}
-	}
+	csv := getCSVByPrefix(csvList, deployerCSVPrefix)
 	if csv != nil {
 		if err := r.delete(csv); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("Unable to delete csv: %v", err)
@@ -901,6 +959,18 @@ func (r *ManagedOCSReconciler) own(resource metav1.Object) error {
 		return err
 	}
 	return nil
+}
+
+func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1a1.ClusterServiceVersion {
+	var csv *opv1a1.ClusterServiceVersion = nil
+	for index := range csvList.Items {
+		candidate := &csvList.Items[index]
+		if strings.HasPrefix(candidate.Name, name) {
+			csv = candidate
+			break
+		}
+	}
+	return csv
 }
 
 func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {

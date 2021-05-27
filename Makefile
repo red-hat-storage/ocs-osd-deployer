@@ -52,6 +52,29 @@ run: generate fmt vet manifests export_env_vars
 	kubectl create secret generic ${ADDON_NAME}-pagerduty -n ${NAMESPACE} --from-literal PAGERDUTY_KEY="test-key" --dry-run=client -oyaml | kubectl apply -f -
 	kubectl create secret generic ${ADDON_NAME}-deadmanssnitch -n ${NAMESPACE} --from-literal SNITCH_URL="https://test-url" --dry-run=client -oyaml | kubectl apply -f -
 	kubectl create configmap rook-ceph-operator-config -n ${NAMESPACE} --dry-run=client -oyaml | kubectl apply -f -
+	echo -e "apiVersion: operators.coreos.com/v1alpha1" \
+	      "\nkind: ClusterServiceVersion" \
+		  "\nmetadata:" \
+		  "\n  name: ocs-operator-0.1" \
+		  "\n  namespace: ${NAMESPACE}" \
+		  "\nspec:" \
+		  "\n  displayName: ocs operator" \
+		  "\n  install:" \
+		  "\n    spec:" \
+		  "\n      deployments:" \
+		  "\n      - name: test" \
+		  "\n        spec:" \
+		  "\n          selector:" \
+		  "\n            matchLabels:" \
+		  "\n              app: test" \
+		  "\n          template:" \
+		  "\n            metadata:" \
+		  "\n              labels:" \
+		  "\n                app: test" \
+		  "\n            spec:" \
+		  "\n              containers:" \
+		  "\n              - name: test" \
+		  "\n    strategy: deployment" | kubectl apply -f -
 	go run ./main.go
 
 # Install CRDs into a cluster

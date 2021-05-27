@@ -206,6 +206,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	ocsCSVTemplate := opv1a1.ClusterServiceVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ocsOperatorName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 	ocsInitializationTemplate := ocsv1.OCSInitialization{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-ocsinit",
@@ -903,6 +909,59 @@ var _ = Describe("ManagedOCS controller", func() {
 					Expect(k8sClient.Get(ctx, ocsInitKey, ocsInit)).Should(Succeed())
 					return ocsInit.Spec.EnableCephTools
 				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the OCS CSV resource is created", func() {
+			It("should patch the OCS CSV to set resources for required pods", func() {
+				ocsCSV := ocsCSVTemplate.DeepCopy()
+				ocsCSVInitKey := utils.GetResourceKey(ocsCSV)
+				Expect(k8sClient.Get(ctx, ocsCSVInitKey, ocsCSV)).Should(Succeed())
+
+				deployments := ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
+				for i := range deployments {
+					containers := deployments[i].Spec.Template.Spec.Containers
+					for j := range containers {
+						container := &containers[j]
+						if container.Name == "ocs-operator" ||
+							container.Name == "rook-ceph-operator" ||
+							container.Name == "ocs-metrics-exporter" {
+							Expect(container.Resources).Should(Equal(ctrlutils.GetResourceRequirements(container.Name)))
+						}
+					}
+				}
+			})
+		})
+		When("the OCS CSV resource is modified", func() {
+			It("should revert the changes in OCS CSV to have provided resource requirements", func() {
+				ocsCSV := ocsCSVTemplate.DeepCopy()
+				ocsCSVInitKey := utils.GetResourceKey(ocsCSV)
+				Expect(k8sClient.Get(ctx, ocsCSVInitKey, ocsCSV)).Should(Succeed())
+
+				deployments := ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
+				var depIndex int
+				var conIndex int
+				for i := range deployments {
+					containers := deployments[i].Spec.Template.Spec.Containers
+					for j := range containers {
+						container := &containers[j]
+						if container.Name == "ocs-operator" {
+							container.Resources.Limits = corev1.ResourceList{
+								"cpu":    resource.MustParse("3000m"),
+								"memory": resource.MustParse("8Gi"),
+							}
+							Expect(k8sClient.Update(ctx, ocsCSV)).Should(Succeed())
+							depIndex = i
+							conIndex = j
+						}
+					}
+				}
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() corev1.ResourceRequirements {
+					Expect(k8sClient.Get(ctx, ocsCSVInitKey, ocsCSV)).Should(Succeed())
+					deployment := ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs[depIndex]
+					return deployment.Spec.Template.Spec.Containers[conIndex].Resources
+				}, timeout, interval).Should(Equal(ctrlutils.GetResourceRequirements("ocs-operator")))
 			})
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {
