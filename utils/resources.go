@@ -70,6 +70,36 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 			"memory": resource.MustParse("200Mi"),
 		},
 	},
+	"ocs-operator": {
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("512Mi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("512Mi"),
+		},
+	},
+	"rook-ceph-operator": {
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("512Mi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("512Mi"),
+		},
+	},
+	"ocs-metrics-exporter": {
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("512Mi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("512Mi"),
+		},
+	},
 
 	// Note: These values come from the example rook-ceph-operator-config, found here:
 	// https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/operator.yaml#L123-L270

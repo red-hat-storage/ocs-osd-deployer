@@ -23,7 +23,9 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -153,6 +155,14 @@ var _ = BeforeSuite(func(done Done) {
 	deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{}
 	Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
 
+	// create a mock OCS CSV
+	ocsCSV := &opv1a1.ClusterServiceVersion{}
+	ocsCSV.Name = ocsOperatorName
+	ocsCSV.Namespace = testPrimaryNamespace
+	ocsCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+	ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
+	Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
+
 	// Create the ManagedOCS resource
 	managedOCS := &v1.ManagedOCS{}
 	managedOCS.Name = managedOCSName
@@ -167,3 +177,69 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func getMockOCSCSVDeploymentSpec() []opv1a1.StrategyDeploymentSpec {
+	deploymentSpec := []opv1a1.StrategyDeploymentSpec{
+		{
+			Name: "deployment1",
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "ocs-operator"},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{"app": "ocs-operator"},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "ocs-operator",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "deployment2",
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "rook-ceph-operator"},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{"app": "rook-ceph-operator"},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "rook-ceph-operator",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "deployment3",
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "ocs-metrics-exporter"},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{"app": "ocs-metrics-exporter"},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "ocs-metrics-exporter",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return deploymentSpec
+}
