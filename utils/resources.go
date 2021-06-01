@@ -100,6 +100,16 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 			"memory": resource.MustParse("512Mi"),
 		},
 	},
+	"crashcollector": {
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("50m"),
+			"memory": resource.MustParse("20Mi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("50m"),
+			"memory": resource.MustParse("20Mi"),
+		},
+	},
 
 	// Note: These values come from the example rook-ceph-operator-config, found here:
 	// https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/operator.yaml#L123-L270

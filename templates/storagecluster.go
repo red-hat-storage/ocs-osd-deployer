@@ -52,9 +52,10 @@ var StorageClusterTemplate = ocsv1.StorageCluster{
 			},
 		},
 		Resources: map[string]corev1.ResourceRequirements{
-			"mds": utils.GetResourceRequirements("mds"),
-			"mgr": utils.GetResourceRequirements("mgr"),
-			"mon": utils.GetResourceRequirements("mon"),
+			"mds":            utils.GetResourceRequirements("mds"),
+			"mgr":            utils.GetResourceRequirements("mgr"),
+			"mon":            utils.GetResourceRequirements("mon"),
+			"crashcollector": utils.GetResourceRequirements("crashcollector"),
 		},
 		StorageDeviceSets: []ocsv1.StorageDeviceSet{{
 			Name:  "default",
