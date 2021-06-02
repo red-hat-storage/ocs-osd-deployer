@@ -35,7 +35,7 @@ spec:
             memory: 30Mi
           requests:
             cpu: 100m
-            memory: 20Mi
+            memory: 30Mi
         env:
         - name: NAMESPACE
           valueFrom:
@@ -59,7 +59,7 @@ spec:
             memory: 30Mi
           requests:
             cpu: 10m
-            memory: 2Mi
+            memory: 30Mi
         env:
         - name: NAMESPACE
           valueFrom:

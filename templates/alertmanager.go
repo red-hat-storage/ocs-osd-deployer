@@ -18,6 +18,7 @@ package templates
 
 import (
 	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/openshift/ocs-osd-deployer/utils"
 )
 
 // AlertmanagerTemplate is the template that serves as the base for the Alert Manager deployed by the operator
@@ -27,5 +28,6 @@ var AlertmanagerTemplate = promv1.Alertmanager{
 	Spec: promv1.AlertmanagerSpec{
 		Replicas:     &_3,
 		ConfigSecret: "managed-ocs-alertmanager-config-secret",
+		Resources:    utils.GetResourceRequirements("alertmanager"),
 	},
 }
