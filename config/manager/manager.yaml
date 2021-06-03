@@ -32,10 +32,10 @@ spec:
         resources:
           limits:
             cpu: 100m
-            memory: 30Mi
+            memory: 200Mi
           requests:
             cpu: 100m
-            memory: 30Mi
+            memory: 200Mi
         env:
         - name: NAMESPACE
           valueFrom:
@@ -58,7 +58,7 @@ spec:
             cpu: 100m
             memory: 30Mi
           requests:
-            cpu: 10m
+            cpu: 100m
             memory: 30Mi
         env:
         - name: NAMESPACE
