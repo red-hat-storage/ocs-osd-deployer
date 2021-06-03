@@ -106,12 +106,12 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 	},
 	"ocs-metrics-exporter": {
 		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse("20m"),
-			"memory": resource.MustParse("35Mi"),
+			"cpu":    resource.MustParse("60m"),
+			"memory": resource.MustParse("75Mi"),
 		},
 		Requests: corev1.ResourceList{
-			"cpu":    resource.MustParse("20m"),
-			"memory": resource.MustParse("35Mi"),
+			"cpu":    resource.MustParse("60m"),
+			"memory": resource.MustParse("75Mi"),
 		},
 	},
 	"crashcollector": {
