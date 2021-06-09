@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
@@ -13,6 +12,7 @@ import (
 	utils "github.com/openshift/ocs-osd-deployer/testutils"
 	ctrlutils "github.com/openshift/ocs-osd-deployer/utils"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
