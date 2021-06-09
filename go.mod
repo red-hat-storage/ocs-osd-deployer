@@ -3,17 +3,36 @@ module github.com/openshift/ocs-osd-deployer
 go 1.15
 
 require (
-	github.com/coreos/prometheus-operator v0.38.0
-	github.com/go-logr/logr v0.3.0
+	cloud.google.com/go v0.74.0 // indirect
+	github.com/go-logr/logr v0.4.0
 	github.com/go-logr/zapr v0.2.0 // indirect
-	github.com/onsi/ginkgo v1.12.1
-	github.com/onsi/gomega v1.10.1
+	github.com/go-openapi/spec v0.20.3 // indirect
+	github.com/go-openapi/swag v0.19.15 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/onsi/ginkgo v1.14.1
+	github.com/onsi/gomega v1.10.2
 	github.com/openshift/ocs-operator v0.0.1-alpha1.0.20201201172124-0811c33c21b2
 	github.com/operator-framework/api v0.1.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.47.0
+	github.com/prometheus/client_golang v1.10.0 // indirect
+	github.com/prometheus/common v0.20.0 // indirect
+	github.com/rook/rook v1.4.6
+	github.com/stretchr/testify v1.7.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/zap v1.14.1
-	k8s.io/api v0.19.3
-	k8s.io/apimachinery v0.19.3
+	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
+	golang.org/x/oauth2 v0.0.0-20210210192628-66670185b0cd // indirect
+	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
+	golang.org/x/tools v0.1.0 // indirect
+	google.golang.org/protobuf v1.26.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	k8s.io/api v0.21.0
+	k8s.io/apiextensions-apiserver v0.21.0 // indirect
+	k8s.io/apimachinery v0.21.0
 	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/klog/v2 v2.8.0 // indirect
+	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10 // indirect
 	sigs.k8s.io/controller-runtime v0.6.3
 )
 

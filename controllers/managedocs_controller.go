@@ -42,12 +42,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	promv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/go-logr/logr"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	"github.com/openshift/ocs-osd-deployer/templates"
 	"github.com/openshift/ocs-osd-deployer/utils"
+	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 const (
