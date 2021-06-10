@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/api/equality"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -49,6 +48,7 @@ import (
 	"github.com/openshift/ocs-osd-deployer/templates"
 	"github.com/openshift/ocs-osd-deployer/utils"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 )
 
 const (
@@ -60,7 +60,7 @@ const (
 	storageClusterName                     = "ocs-storagecluster"
 	prometheusName                         = "managed-ocs-prometheus"
 	alertmanagerName                       = "managed-ocs-alertmanager"
-	alertmanagerConfigSecretName           = "managed-ocs-alertmanager-config-secret"
+	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
 	dmsRuleName                            = "dms-monitor-rule"
 	storageClassSizeKey                    = "size"
 	deviceSetName                          = "default"
@@ -101,7 +101,7 @@ type ManagedOCSReconciler struct {
 	alertmanager                       *promv1.Alertmanager
 	pagerdutySecret                    *corev1.Secret
 	deadMansSnitchSecret               *corev1.Secret
-	alertmanagerConfigSecret           *corev1.Secret
+	alertmanagerConfig                 *promv1a1.AlertmanagerConfig
 	k8sMetricsServiceMonitor           *promv1.ServiceMonitor
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
 	namespace                          string
@@ -113,7 +113,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=managedocs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=storageclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=ocsinitializations,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={alertmanagers,prometheuses},verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={alertmanagers,prometheuses,alertmanagerconfigs},verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=prometheusrules,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=podmonitors,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=servicemonitors,verbs=get;list;watch;update;patch;create;delete
@@ -209,7 +209,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&ocsv1.StorageCluster{}).
 		Owns(&promv1.Prometheus{}).
 		Owns(&promv1.Alertmanager{}).
-		Owns(&corev1.Secret{}).
+		Owns(&promv1a1.AlertmanagerConfig{}).
 		Owns(&promv1.PrometheusRule{}).
 		Owns(&promv1.ServiceMonitor{}).
 
@@ -329,9 +329,9 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.deadMansSnitchSecret.Name = r.DeadMansSnitchSecretName
 	r.deadMansSnitchSecret.Namespace = r.namespace
 
-	r.alertmanagerConfigSecret = &corev1.Secret{}
-	r.alertmanagerConfigSecret.Name = alertmanagerConfigSecretName
-	r.alertmanagerConfigSecret.Namespace = r.namespace
+	r.alertmanagerConfig = &promv1a1.AlertmanagerConfig{}
+	r.alertmanagerConfig.Name = alertmanagerConfigName
+	r.alertmanagerConfig.Namespace = r.namespace
 
 	r.k8sMetricsServiceMonitor = &promv1.ServiceMonitor{}
 	r.k8sMetricsServiceMonitor.Name = k8sMetricsServiceMonitorName
@@ -400,7 +400,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileAlertmanager(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcileAlertmanagerConfigSecret(); err != nil {
+		if err := r.reconcileAlertmanagerConfig(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileK8SMetricsServiceMonitorAuthSecret(); err != nil {
@@ -689,11 +689,11 @@ func (r *ManagedOCSReconciler) reconcileAlertmanager() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) reconcileAlertmanagerConfigSecret() error {
+func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 	r.Log.Info("Reconciling AlertmanagerConfig secret")
 
-	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.alertmanagerConfigSecret, func() error {
-		if err := r.own(r.alertmanagerConfigSecret); err != nil {
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.alertmanagerConfig, func() error {
+		if err := r.own(r.alertmanagerConfig); err != nil {
 			return err
 		}
 
@@ -714,84 +714,23 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfigSecret() error {
 			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
 		}
 
-		alertmanagerConfig := r.generateAlertmanagerConfig(pagerdutyServiceKey, dmsURL)
-		config, err := yaml.Marshal(alertmanagerConfig)
-		if err != nil {
-			return fmt.Errorf("Unable to encode alertmanager conifg: %v", err)
+		desired := templates.AlertmanagerConfigTemplate.DeepCopy()
+		for i := range desired.Spec.Receivers {
+			receiver := &desired.Spec.Receivers[i]
+			switch receiver.Name {
+			case "pagerduty":
+				receiver.PagerDutyConfigs[0].ServiceKey.Key = pagerdutyServiceKey
+				receiver.PagerDutyConfigs[0].Details[0].Key = "SOP"
+				receiver.PagerDutyConfigs[0].Details[0].Value = r.SOPEndpoint
+			case "DeadMansSnitch":
+				receiver.WebhookConfigs[0].URL = &dmsURL
+			}
 		}
-		r.alertmanagerConfigSecret.Data = map[string][]byte{
-			"alertmanager.yaml": config,
-		}
+		r.alertmanagerConfig.Spec = desired.Spec
 		return nil
 	})
 
 	return err
-}
-
-// Prometheus-operator v0.37.0 takes its alert manager configuration from a secret containing a yaml file.
-// This function produces that yaml file.
-// To sanitize the input the yaml is first represented as types in golang.
-func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey string, dmsURL string) interface{} {
-	type PagerDutyConfig struct {
-		ServiceKey string            `yaml:"service_key"`
-		Details    map[string]string `yaml:"details"`
-	}
-
-	type WebhookConfig struct {
-		Url string `yaml:"url"`
-	}
-
-	alertmanagerConfig := struct {
-		Route struct {
-			GroupWait      string `yaml:"group_wait,omitempty"`
-			GroupInterval  string `yaml:"group_interval,omitempty"`
-			RepeatInterval string `yaml:"repeat_interval,omitempty"`
-			Receiver       string `yaml:"receiver,omitempty"`
-			Routes         [2]struct {
-				GroupWait      string            `yaml:"group_wait,omitempty"`
-				GroupInterval  string            `yaml:"group_interval,omitempty"`
-				RepeatInterval string            `yaml:"repeat_interval,omitempty"`
-				Receiver       string            `yaml:"receiver,omitempty"`
-				GroupBy        []string          `yaml:"group_by,omitempty"`
-				Match          map[string]string `yaml:"match,omitempty"`
-			} `yaml:"routes"`
-		} `yaml:"route"`
-		Receivers [2]struct {
-			Name             string            `yaml:"name"`
-			PagerdutyConfigs []PagerDutyConfig `yaml:"pagerduty_configs,omitempty"`
-			WebhookConfigs   []WebhookConfig   `yaml:"webhook_configs,omitempty"`
-		} `yaml:"receivers"`
-	}{}
-
-	alertmanagerConfig.Route.Receiver = "pagerduty"
-
-	alertmanagerConfig.Route.Routes[0].GroupWait = "30s"
-	alertmanagerConfig.Route.Routes[0].GroupInterval = "5m"
-	alertmanagerConfig.Route.Routes[0].RepeatInterval = "4h"
-	alertmanagerConfig.Route.Routes[0].Receiver = "pagerduty"
-	alertmanagerConfig.Route.Routes[0].Match = make(map[string]string)
-	alertmanagerConfig.Route.Routes[0].Match["severity"] = "critical"
-	alertmanagerConfig.Route.Routes[0].GroupBy = []string{"alertname"}
-
-	alertmanagerConfig.Route.Routes[1].GroupWait = "5m"
-	alertmanagerConfig.Route.Routes[1].GroupInterval = "5m"
-	alertmanagerConfig.Route.Routes[1].RepeatInterval = "5m"
-	alertmanagerConfig.Route.Routes[1].Receiver = "DeadMansSnitch"
-	alertmanagerConfig.Route.Routes[1].Match = make(map[string]string)
-	alertmanagerConfig.Route.Routes[1].Match["alertname"] = "DeadMansSnitch"
-
-	alertmanagerConfig.Receivers[0].Name = "pagerduty"
-	alertmanagerConfig.Receivers[0].PagerdutyConfigs = []PagerDutyConfig{{}}
-	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].ServiceKey = pagerdutyServiceKey
-	alertmanagerConfig.Receivers[0].PagerdutyConfigs[0].Details = map[string]string{
-		"SOP": r.SOPEndpoint,
-	}
-
-	alertmanagerConfig.Receivers[1].Name = "DeadMansSnitch"
-	alertmanagerConfig.Receivers[1].WebhookConfigs = []WebhookConfig{{}}
-	alertmanagerConfig.Receivers[1].WebhookConfigs[0].Url = dmsURL
-
-	return &alertmanagerConfig
 }
 
 func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() error {

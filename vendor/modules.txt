@@ -149,6 +149,7 @@ github.com/pkg/errors
 ## explicit
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1
+github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1
 # github.com/prometheus/client_golang v1.10.0
 ## explicit
 github.com/prometheus/client_golang/prometheus

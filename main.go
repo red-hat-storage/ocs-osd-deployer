@@ -40,6 +40,7 @@ import (
 	"github.com/openshift/ocs-osd-deployer/controllers"
 	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -68,7 +69,7 @@ func addAllSchemes(scheme *runtime.Scheme) {
 
 	utilruntime.Must(promv1.AddToScheme(scheme))
 
-	// utilruntime.Must(promv1a1.AddToScheme(scheme))
+	utilruntime.Must(promv1a1.AddToScheme(scheme))
 
 	utilruntime.Must(v1.AddToScheme(scheme))
 
