@@ -50,15 +50,18 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 
 const (
-	testPrimaryNamespace             = "primary"
-	testSecondaryNamespace           = "secondary"
-	testAddonParamsSecretName        = "test-addon-secret"
-	testPagerdutySecretName          = "test-pagerduty-secret"
-	testDeadMansSnitchSecretName     = "test-deadmanssnitch-secret"
-	testAddonConfigMapName           = "test-addon-configmap"
-	testAddonConfigMapDeleteLabelKey = "test-addon-configmap-delete-label-key"
-	testSubscriptionName             = "test-subscription"
-	testDeployerCSVName              = "ocs-osd-deployer.x.y.z"
+	testPrimaryNamespace                       = "primary"
+	testSecondaryNamespace                     = "secondary"
+	testAddonParamsSecretName                  = "test-addon-secret"
+	testPagerdutySecretName                    = "test-pagerduty-secret"
+	testDeadMansSnitchSecretName               = "test-deadmanssnitch-secret"
+	testAddonConfigMapName                     = "test-addon-configmap"
+	testAddonConfigMapDeleteLabelKey           = "test-addon-configmap-delete-label-key"
+	testSubscriptionName                       = "test-subscription"
+	testDeployerCSVName                        = "ocs-osd-deployer.x.y.z"
+	testGrafanaFederateSecretName              = "grafana-datasources"
+	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
+	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
 )
 
 func TestAPIs(t *testing.T) {
@@ -139,6 +142,10 @@ var _ = BeforeSuite(func(done Done) {
 	secondaryNS := &corev1.Namespace{}
 	secondaryNS.Name = testSecondaryNamespace
 	Expect(k8sClient.Create(ctx, secondaryNS)).Should(Succeed())
+
+	openshiftMonitoringNS := &corev1.Namespace{}
+	openshiftMonitoringNS.Name = testOpenshiftMonitoringNamespace
+	Expect(k8sClient.Create(ctx, openshiftMonitoringNS)).Should(Succeed())
 
 	// Create a mock subscription
 	deployerSub := &opv1a1.Subscription{}
