@@ -117,11 +117,11 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 	"crashcollector": {
 		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse("50m"),
-			"memory": resource.MustParse("20Mi"),
+			"memory": resource.MustParse("80Mi"),
 		},
 		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse("50m"),
-			"memory": resource.MustParse("20Mi"),
+			"memory": resource.MustParse("80Mi"),
 		},
 	},
 	"csi-provisioner": {
