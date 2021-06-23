@@ -167,9 +167,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	prometheusRulesPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
 			func(meta metav1.Object, _ runtime.Object) bool {
-				name := meta.GetName()
 				labels := meta.GetLabels()
-				return labels == nil || labels[monLabelKey] != monLabelValue || name == dmsRuleName
+				return labels == nil || labels[monLabelKey] != monLabelValue
 			},
 		),
 	)
@@ -202,6 +201,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&promv1.Prometheus{}).
 		Owns(&promv1.Alertmanager{}).
 		Owns(&corev1.Secret{}).
+		Owns(&promv1.PrometheusRule{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -342,8 +342,13 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			}
 			r.Log.Info("finallizer removed successfully")
 
-		} else if err := r.deleteComponents(); err != nil {
-			return ctrl.Result{}, err
+		} else {
+			// Storage cluster needs to be deleted before we delete the CSV so we can not leave it to the
+			// k8s garbage collector to delete it
+			r.Log.Info("deleting storagecluster")
+			if err := r.delete(r.storageCluster); err != nil {
+				return ctrl.Result{}, fmt.Errorf("unable to delete storagecluster: %v", err)
+			}
 		}
 
 	} else if r.managedOCS.UID != "" {
@@ -361,7 +366,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.reconcileStrategy = v1.ReconcileStrategyNone
 		}
 
-		// Reconcile the different owned resources
+		// Reconcile the different resources
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -404,7 +409,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			}
 
 			r.Log.Info("starting OCS uninstallation - deleting managedocs")
-			if err := r.delete(r.managedOCS); err != nil && !errors.IsNotFound(err) {
+			if err := r.delete(r.managedOCS); err != nil {
 				return ctrl.Result{}, fmt.Errorf("unable to delete managedocs: %v", err)
 			}
 		}
@@ -492,14 +497,6 @@ func (r *ManagedOCSReconciler) verifyComponentsDoNotExist() bool {
 		return true
 	}
 	return false
-}
-
-func (r *ManagedOCSReconciler) deleteComponents() error {
-	r.Log.Info("deleting storagecluster")
-	if err := r.delete(r.storageCluster); err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("unable to delete storagecluster: %v", err)
-	}
-	return nil
 }
 
 func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
@@ -819,160 +816,7 @@ func (r *ManagedOCSReconciler) reconcileMonitoringResources() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) checkUninstallCondition() bool {
-	configmap := &corev1.ConfigMap{}
-	configmap.Name = r.AddonConfigMapName
-	configmap.Namespace = r.namespace
-
-	err := r.get(configmap)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			r.Log.Error(err, "Unable to get addon delete configmap")
-		}
-		return false
-	}
-	_, ok := configmap.Labels[r.AddonConfigMapDeleteLabelKey]
-	return ok
-}
-
-func (r *ManagedOCSReconciler) areComponentsReadyForUninstall() bool {
-	subComponents := r.managedOCS.Status.Components
-	return subComponents.StorageCluster.State == v1.ComponentReady &&
-		subComponents.Prometheus.State == v1.ComponentReady &&
-		subComponents.Alertmanager.State == v1.ComponentReady
-}
-
-func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.UnrestrictedClient.List(r.ctx, pvcList)
-	if err != nil {
-		return false, fmt.Errorf("unable to list pvcs: %v", err)
-	}
-	for i := range pvcList.Items {
-		scName := *pvcList.Items[i].Spec.StorageClassName
-		if scName == storageClassCephFSName || scName == storageClassRbdName {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
-	csvList := opv1a1.ClusterServiceVersionList{}
-	if err := r.list(&csvList); err != nil {
-		return fmt.Errorf("unable to list csv resources: %v", err)
-	}
-
-	csv := getCSVByPrefix(csvList, ocsOperatorName)
-	if csv == nil {
-		return fmt.Errorf("OCS CSV not found")
-	}
-	var isChanged bool
-	deployments := csv.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
-	for i := range deployments {
-		containers := deployments[i].Spec.Template.Spec.Containers
-		for j := range containers {
-			switch container := &containers[j]; container.Name {
-			case "ocs-operator":
-				resources := utils.GetResourceRequirements("ocs-operator")
-				if !equality.Semantic.DeepEqual(container.Resources, resources) {
-					container.Resources = resources
-					isChanged = true
-				}
-			case "rook-ceph-operator":
-				resources := utils.GetResourceRequirements("rook-ceph-operator")
-				if !equality.Semantic.DeepEqual(container.Resources, resources) {
-					container.Resources = resources
-					isChanged = true
-				}
-			case "ocs-metrics-exporter":
-				resources := utils.GetResourceRequirements("ocs-metrics-exporter")
-				if !equality.Semantic.DeepEqual(container.Resources, resources) {
-					container.Resources = resources
-					isChanged = true
-				}
-			default:
-				r.Log.V(-1).Info("Could not find resource requirement", "Resource", container.Name)
-			}
-		}
-	}
-	if isChanged {
-		if err := r.update(csv); err != nil {
-			return fmt.Errorf("Failed to update OCS CSV with resource requirements: %v", err)
-		}
-	}
-	return nil
-}
-
-func (r *ManagedOCSReconciler) removeOLMComponents() error {
-
-	r.Log.Info("Deleting subscription")
-	subscription := &opv1a1.Subscription{}
-	subscription.Namespace = r.namespace
-	subscription.Name = r.DeployerSubscriptionName
-	if err := r.delete(subscription); err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("unable to delete the deployer subscription: %v", err)
-	}
-	r.Log.Info("deployer subscription removed successfully")
-
-	r.Log.Info("deleting deployer csv")
-	csvList := opv1a1.ClusterServiceVersionList{}
-	if err := r.list(&csvList); err != nil {
-		return fmt.Errorf("unable to list csv resources: %v", err)
-	}
-
-	csv := getCSVByPrefix(csvList, deployerCSVPrefix)
-	if csv != nil {
-		if err := r.delete(csv); err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("Unable to delete csv: %v", err)
-		}
-	}
-
-	r.Log.Info("Deployer csv removed successfully")
-	return nil
-}
-
-func (r *ManagedOCSReconciler) get(obj runtime.Object) error {
-	key, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return err
-	}
-	return r.Client.Get(r.ctx, key, obj)
-}
-
-func (r *ManagedOCSReconciler) list(obj runtime.Object) error {
-	listOptions := client.InNamespace(r.namespace)
-	return r.Client.List(r.ctx, obj, listOptions)
-}
-
-func (r *ManagedOCSReconciler) update(obj runtime.Object) error {
-	return r.Client.Update(r.ctx, obj)
-}
-
-func (r *ManagedOCSReconciler) delete(obj runtime.Object) error {
-	return r.Client.Delete(r.ctx, obj)
-}
-
-func (r *ManagedOCSReconciler) own(resource metav1.Object) error {
-	// Ensure managedOCS ownership on a resource
-	if err := ctrl.SetControllerReference(r.managedOCS, resource, r.Scheme); err != nil {
-		return err
-	}
-	return nil
-}
-
-func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1a1.ClusterServiceVersion {
-	var csv *opv1a1.ClusterServiceVersion = nil
-	for index := range csvList.Items {
-		candidate := &csvList.Items[index]
-		if strings.HasPrefix(candidate.Name, name) {
-			csv = candidate
-			break
-		}
-	}
-	return csv
-}
-
+// reconcileRookCephOperatorConfig is used to set resource request and limits on csi containers
 func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 	rookConfigMap := &corev1.ConfigMap{}
 	rookConfigMap.Name = rookConfigMapName
@@ -1084,4 +928,161 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 	}
 
 	return nil
+}
+
+func (r *ManagedOCSReconciler) checkUninstallCondition() bool {
+	configmap := &corev1.ConfigMap{}
+	configmap.Name = r.AddonConfigMapName
+	configmap.Namespace = r.namespace
+
+	err := r.get(configmap)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			r.Log.Error(err, "Unable to get addon delete configmap")
+		}
+		return false
+	}
+	_, ok := configmap.Labels[r.AddonConfigMapDeleteLabelKey]
+	return ok
+}
+
+func (r *ManagedOCSReconciler) areComponentsReadyForUninstall() bool {
+	subComponents := r.managedOCS.Status.Components
+	return subComponents.StorageCluster.State == v1.ComponentReady &&
+		subComponents.Prometheus.State == v1.ComponentReady &&
+		subComponents.Alertmanager.State == v1.ComponentReady
+}
+
+func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	err := r.UnrestrictedClient.List(r.ctx, pvcList)
+	if err != nil {
+		return false, fmt.Errorf("unable to list pvcs: %v", err)
+	}
+	for i := range pvcList.Items {
+		scName := *pvcList.Items[i].Spec.StorageClassName
+		if scName == storageClassCephFSName || scName == storageClassRbdName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
+	csvList := opv1a1.ClusterServiceVersionList{}
+	if err := r.list(&csvList); err != nil {
+		return fmt.Errorf("unable to list csv resources: %v", err)
+	}
+
+	csv := getCSVByPrefix(csvList, ocsOperatorName)
+	if csv == nil {
+		return fmt.Errorf("OCS CSV not found")
+	}
+	var isChanged bool
+	deployments := csv.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
+	for i := range deployments {
+		containers := deployments[i].Spec.Template.Spec.Containers
+		for j := range containers {
+			switch container := &containers[j]; container.Name {
+			case "ocs-operator":
+				resources := utils.GetResourceRequirements("ocs-operator")
+				if !equality.Semantic.DeepEqual(container.Resources, resources) {
+					container.Resources = resources
+					isChanged = true
+				}
+			case "rook-ceph-operator":
+				resources := utils.GetResourceRequirements("rook-ceph-operator")
+				if !equality.Semantic.DeepEqual(container.Resources, resources) {
+					container.Resources = resources
+					isChanged = true
+				}
+			case "ocs-metrics-exporter":
+				resources := utils.GetResourceRequirements("ocs-metrics-exporter")
+				if !equality.Semantic.DeepEqual(container.Resources, resources) {
+					container.Resources = resources
+					isChanged = true
+				}
+			default:
+				r.Log.V(-1).Info("Could not find resource requirement", "Resource", container.Name)
+			}
+		}
+	}
+	if isChanged {
+		if err := r.update(csv); err != nil {
+			return fmt.Errorf("Failed to update OCS CSV with resource requirements: %v", err)
+		}
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) removeOLMComponents() error {
+
+	r.Log.Info("Deleting subscription")
+	subscription := &opv1a1.Subscription{}
+	subscription.Namespace = r.namespace
+	subscription.Name = r.DeployerSubscriptionName
+	if err := r.delete(subscription); err != nil {
+		return fmt.Errorf("unable to delete the deployer subscription: %v", err)
+	}
+	r.Log.Info("deployer subscription removed successfully")
+
+	r.Log.Info("deleting deployer csv")
+	csvList := opv1a1.ClusterServiceVersionList{}
+	if err := r.list(&csvList); err != nil {
+		return fmt.Errorf("unable to list csv resources: %v", err)
+	}
+
+	csv := getCSVByPrefix(csvList, deployerCSVPrefix)
+	if csv != nil {
+		if err := r.delete(csv); err != nil {
+			return fmt.Errorf("Unable to delete csv: %v", err)
+		}
+	}
+
+	r.Log.Info("Deployer csv removed successfully")
+	return nil
+}
+
+func (r *ManagedOCSReconciler) get(obj runtime.Object) error {
+	key, err := client.ObjectKeyFromObject(obj)
+	if err != nil {
+		return err
+	}
+	return r.Client.Get(r.ctx, key, obj)
+}
+
+func (r *ManagedOCSReconciler) list(obj runtime.Object) error {
+	listOptions := client.InNamespace(r.namespace)
+	return r.Client.List(r.ctx, obj, listOptions)
+}
+
+func (r *ManagedOCSReconciler) update(obj runtime.Object) error {
+	return r.Client.Update(r.ctx, obj)
+}
+
+func (r *ManagedOCSReconciler) delete(obj runtime.Object) error {
+	if err := r.Client.Delete(r.ctx, obj); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) own(resource metav1.Object) error {
+	// Ensure managedOCS ownership on a resource
+	if err := ctrl.SetControllerReference(r.managedOCS, resource, r.Scheme); err != nil {
+		return err
+	}
+	return nil
+}
+
+func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1a1.ClusterServiceVersion {
+	var csv *opv1a1.ClusterServiceVersion = nil
+	for index := range csvList.Items {
+		candidate := &csvList.Items[index]
+		if strings.HasPrefix(candidate.Name, name) {
+			csv = candidate
+			break
+		}
+	}
+	return csv
 }
