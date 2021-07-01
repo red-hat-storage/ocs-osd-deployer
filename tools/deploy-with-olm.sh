@@ -39,6 +39,11 @@ DEPLOYER_IMAGE=${DEPLOYER_IMAGE:-${IMAGE_REPO}/${DEPLOYER_NAME}:${DEPLOYER_VERSI
 # Deploy target
 TARGET_NAMESPACE=${TARGET_NAMESPACE:-openshift-storage}
 
+# CSV environment variables
+ADDON_NAME=${ADDON_NAME:-ocs-converged}
+BUNDLE_FILE=bundle/manifests/ocs-osd-deployer.clusterserviceversion.yaml
+CLUSTER_SIZE=${CLUSTER_SIZE:-1}
+
 # Generate the deployer image 
 blue "Generate deployer image: ${DEPLOYER_IMAGE}"
 exit_on_err make docker-build IMG=${DEPLOYER_IMAGE}
@@ -46,25 +51,38 @@ exit_on_err make docker-push IMG=${DEPLOYER_IMAGE}
 
 # Generate the olm bundle image
 blue "Generate and push the olm bundle image: ${BUNDLE_IMAGE}"
-exit_on_err make bundle IMG=${DEPLOYER_IMAGE}
+exit_on_err make bundle IMG=${DEPLOYER_IMAGE} OUTPUT_DIR=./tools/bundle
+exit_on_err sed -i "s|- name: ADDON_NAME|- {name: ADDON_NAME, value: ${ADDON_NAME}}|" ${BUNDLE_FILE}
+exit_on_err sed -i "s|- name: SOP_ENDPOINT|- {name: SOP_ENDPOINT, value: \'${SOP_ENDPOINT}\'}|" ${BUNDLE_FILE}
 exit_on_err make bundle-build BUNDLE_IMG=${BUNDLE_IMAGE}
 exit_on_err make docker-push IMG=${BUNDLE_IMAGE}
 
+# Install operator prereqs on cluster
 # In install olm if needed
 blue "Checking for existing olm"
-${K8S_CLIENT} get namespace olm >/dev/null 2>&1
-if [ $? -eq 0 ]; then
+if ${K8S_CLIENT} get namespace olm >/dev/null 2>&1
+then
+    blue "olm found"
+elif ${K8S_CLIENT} get namespace openshift-operator-lifecycle-manager &> /dev/null
+then
     blue "olm found"
 else 
     blue "olm not found, installing olm in target cluster"
     exit_on_err ${OP_SDK} olm install     
 fi
 
+blue "Creating ${TARGET_NAMESPACE} on cluster"
+exit_on_err ${K8S_CLIENT} create namespace ${TARGET_NAMESPACE} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+
+blue "Creating catalogsource containing needed dependencies on cluster"
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f ./tools/yamls/ocs-catalogsource.yaml
+
+blue "Creating secrets needed for the operator to run without error"
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic addon-${ADDON_NAME}-parameters --from-literal=size=${CLUSTER_SIZE} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-pagerduty --from-literal=PAGERDUTY_KEY=${PD_KEY} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-deadmanssnitch --from-literal=SNITCH_URL=${SNITCH_URL} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+
 # Deploy the bundle
 blue "Deploy/Run the ${BUNDLE_NAME}:${BUNDLE_VERSION} in the cluster (at ${TARGET_NAMESPACE})"
-${K8S_CLIENT} get namespace olm >/dev/null 2>&1
-if [ $? -eq 0 ]; then
-    exit_on_err ${K8S_CLIENT} create namespace ${TARGET_NAMESPACE}
-fi
-exit_on_err ${K8S_CLIENT} apply -f ./tools/ocs-catalogsource.yaml
+
 exit_on_err ${OP_SDK} run bundle ${BUNDLE_IMAGE} -n ${TARGET_NAMESPACE}

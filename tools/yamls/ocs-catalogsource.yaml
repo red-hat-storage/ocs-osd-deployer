@@ -2,7 +2,6 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
 metadata:
   name: ocs-catalogsource
-  namespace: olm
 spec:
   displayName: OpenShift Container Storage
   icon:
