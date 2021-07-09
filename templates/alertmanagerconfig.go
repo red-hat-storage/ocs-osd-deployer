@@ -31,11 +31,10 @@ func convertToApiExtV1JSON(val interface{}) apiextensionsv1.JSON {
 	return out
 }
 
-var match1 = []promv1a1.Matcher{{Name: "severity"}, {Value: "critical"}}
-
 var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 	Spec: promv1a1.AlertmanagerConfigSpec{
 		Route: &promv1a1.Route{
+			Receiver: "pagerduty",
 			Routes: []apiextensionsv1.JSON{
 				convertToApiExtV1JSON(promv1a1.Route{
 					GroupBy:        []string{"alertname"},
@@ -60,7 +59,7 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 		Receivers: []promv1a1.Receiver{{
 			Name: "pagerduty",
 			PagerDutyConfigs: []promv1a1.PagerDutyConfig{{
-				ServiceKey: &corev1.SecretKeySelector{Key: ""},
+				ServiceKey: &corev1.SecretKeySelector{Key: "", LocalObjectReference: corev1.LocalObjectReference{Name: ""}},
 				Details:    []promv1a1.KeyValue{{Key: "", Value: ""}},
 			}},
 		}, {

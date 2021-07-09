@@ -678,8 +678,13 @@ func (r *ManagedOCSReconciler) reconcileAlertmanager() error {
 		}
 
 		desired := templates.AlertmanagerTemplate.DeepCopy()
-		r.alertmanager.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
+		desired.Spec.AlertmanagerConfigSelector = &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				monLabelKey: monLabelValue,
+			},
+		}
 		r.alertmanager.Spec = desired.Spec
+		utils.AddLabel(r.alertmanager, monLabelKey, monLabelValue)
 
 		return nil
 	})
@@ -719,7 +724,8 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			receiver := &desired.Spec.Receivers[i]
 			switch receiver.Name {
 			case "pagerduty":
-				receiver.PagerDutyConfigs[0].ServiceKey.Key = pagerdutyServiceKey
+				receiver.PagerDutyConfigs[0].ServiceKey.Key = "PAGERDUTY_KEY"
+				receiver.PagerDutyConfigs[0].ServiceKey.LocalObjectReference.Name = r.PagerdutySecretName
 				receiver.PagerDutyConfigs[0].Details[0].Key = "SOP"
 				receiver.PagerDutyConfigs[0].Details[0].Value = r.SOPEndpoint
 			case "DeadMansSnitch":
@@ -727,6 +733,8 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			}
 		}
 		r.alertmanagerConfig.Spec = desired.Spec
+		utils.AddLabel(r.alertmanagerConfig, monLabelKey, monLabelValue)
+
 		return nil
 	})
 
