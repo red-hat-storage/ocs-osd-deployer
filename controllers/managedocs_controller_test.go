@@ -434,11 +434,95 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(configMap.Data["test-key"]).Should(Equal("test-value"))
 			})
 		})
+		When("there is no enable-mcg field in the add-on parameters secret", func() {
+			It("should not create storagecluster", func() {
+				Skip("Skipping this test till Nooba MCG is integrated in deployer")
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secret.Data["size"] = []byte("1")
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				// Ensure, over a period of time, that the resource is not created
+				utils.EnsureNoResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is an invalid enable-mcg value in the add-on parameters secret", func() {
+			It("should not create storagecluster", func() {
+				// Create a invalid enable-mcg parameter value
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secret.Data["size"] = []byte("1")
+				secret.Data["enable-mcg"] = []byte("NO")
+				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+				// Ensure, over a period of time, that the resource is not created
+				utils.EnsureNoResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is a valid enable-mcg value in the addon-on parameters secret which is false", func() {
+			It("should not change storagecluster's MCG reconcile strategy to manage", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secret.Data["size"] = []byte("1")
+				secret.Data["enable-mcg"] = []byte("false")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				Eventually(func() bool {
+					sc := scTemplate.DeepCopy()
+					err := k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)
+					if err != nil {
+						return true
+					}
+					return sc.Spec.MultiCloudGateway.ReconcileStrategy == "manage"
+				}, timeout, interval).Should(BeFalse())
+			})
+		})
+		When("there is a valid enable-mcg value in the addon-on parameters secret which is true", func() {
+			It("should change storagecluster's MCG reconcile strategy to manage", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secret.Data["size"] = []byte("1")
+				secret.Data["enable-mcg"] = []byte("true")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				Eventually(func() bool {
+					sc := scTemplate.DeepCopy()
+					err := k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)
+					if err != nil {
+						return false
+					}
+					return sc.Spec.MultiCloudGateway.ReconcileStrategy == "manage"
+				}, timeout, interval).Should(BeTrue())
+			})
+		})
+		When("MCG is already enabled and enable-mcg value in addon-on parameter secret is false", func() {
+			It("should not change storagecluster's MCG reconcile strategy to 'ignore' or 'standalone'", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secret.Data["enable-mcg"] = []byte("false")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+				// MCG spec should not get updated
+				Eventually(func() bool {
+					sc := scTemplate.DeepCopy()
+					err := k8sClient.Get(ctx, utils.GetResourceKey(sc), sc)
+					if err != nil {
+						return false
+					}
+					return sc.Spec.MultiCloudGateway.ReconcileStrategy == "manage"
+				}, timeout, interval).Should(BeTrue())
+				// Remove the secret for future cases
+				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+				// Delete created resources
+				resList := []runtime.Object{
+					scTemplate.DeepCopy(),
+					promTemplate.DeepCopy(),
+					amTemplate.DeepCopy(),
+				}
+				for _, object := range resList {
+					Expect(k8sClient.Delete(ctx, object)).Should(Succeed())
+				}
+			})
+		})
 		When("there is a valid size in the add-on parameter secret", func() {
 			It("should create reconciled resources", func() {
 				// Create a valid add-on parameters secret
 				secret := addonParamsSecretTemplate.DeepCopy()
 				secret.Data["size"] = []byte("1")
+				secret.Data["enable-mcg"] = []byte("false")
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 				By("Creating a storagecluster resource")
@@ -484,6 +568,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			It("should increase storagecluster's storage device set count", func() {
 				secret := addonParamsSecretTemplate.DeepCopy()
 				secret.Data["size"] = []byte("4")
+				secret.Data["enable-mcg"] = []byte("false")
 				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 				// wait for the storagecluster to update
@@ -511,6 +596,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			It("should not decrease storagecluster's storage device set count", func() {
 				secret := addonParamsSecretTemplate.DeepCopy()
 				secret.Data["size"] = []byte("1")
+				secret.Data["enable-mcg"] = []byte("false")
 				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 				Consistently(func() bool {
