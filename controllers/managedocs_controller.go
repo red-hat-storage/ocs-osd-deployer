@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -55,21 +56,26 @@ const (
 )
 
 const (
-	managedOCSName               = "managedocs"
-	storageClusterName           = "ocs-storagecluster"
-	prometheusName               = "managed-ocs-prometheus"
-	alertmanagerName             = "managed-ocs-alertmanager"
-	alertmanagerConfigSecretName = "managed-ocs-alertmanager-config-secret"
-	dmsRuleName                  = "dms-monitor-rule"
-	storageClassSizeKey          = "size"
-	deviceSetName                = "default"
-	storageClassRbdName          = "ocs-storagecluster-ceph-rbd"
-	storageClassCephFSName       = "ocs-storagecluster-cephfs"
-	deployerCSVPrefix            = "ocs-osd-deployer"
-	ocsOperatorName              = "ocs-operator"
-	monLabelKey                  = "app"
-	monLabelValue                = "managed-ocs"
-	rookConfigMapName            = "rook-ceph-operator-config"
+	managedOCSName                         = "managedocs"
+	storageClusterName                     = "ocs-storagecluster"
+	prometheusName                         = "managed-ocs-prometheus"
+	alertmanagerName                       = "managed-ocs-alertmanager"
+	alertmanagerConfigSecretName           = "managed-ocs-alertmanager-config-secret"
+	dmsRuleName                            = "dms-monitor-rule"
+	storageClassSizeKey                    = "size"
+	deviceSetName                          = "default"
+	storageClassRbdName                    = "ocs-storagecluster-ceph-rbd"
+	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
+	deployerCSVPrefix                      = "ocs-osd-deployer"
+	ocsOperatorName                        = "ocs-operator"
+	monLabelKey                            = "app"
+	monLabelValue                          = "managed-ocs"
+	rookConfigMapName                      = "rook-ceph-operator-config"
+	k8sMetricsServiceMonitorName           = "k8s-metrics-service-monitor"
+	grafanaDatasourceSecretName            = "grafana-datasources"
+	grafanaDatasourceSecretKey             = "prometheus.yaml"
+	k8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
+	openshiftMonitoringNamespace           = "openshift-monitoring"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -87,17 +93,19 @@ type ManagedOCSReconciler struct {
 	DeadMansSnitchSecretName     string
 	SOPEndpoint                  string
 
-	ctx                      context.Context
-	managedOCS               *v1.ManagedOCS
-	storageCluster           *ocsv1.StorageCluster
-	prometheus               *promv1.Prometheus
-	dmsRule                  *promv1.PrometheusRule
-	alertmanager             *promv1.Alertmanager
-	pagerdutySecret          *corev1.Secret
-	deadMansSnitchSecret     *corev1.Secret
-	alertmanagerConfigSecret *corev1.Secret
-	namespace                string
-	reconcileStrategy        v1.ReconcileStrategy
+	ctx                                context.Context
+	managedOCS                         *v1.ManagedOCS
+	storageCluster                     *ocsv1.StorageCluster
+	prometheus                         *promv1.Prometheus
+	dmsRule                            *promv1.PrometheusRule
+	alertmanager                       *promv1.Alertmanager
+	pagerdutySecret                    *corev1.Secret
+	deadMansSnitchSecret               *corev1.Secret
+	alertmanagerConfigSecret           *corev1.Secret
+	k8sMetricsServiceMonitor           *promv1.ServiceMonitor
+	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
+	namespace                          string
+	reconcileStrategy                  v1.ReconcileStrategy
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -107,12 +115,13 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=ocs.openshift.io,namespace=system,resources=ocsinitializations,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={alertmanagers,prometheuses},verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=prometheusrules,verbs=get;list;watch;create;update;patch
-// +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources={podmonitors,servicemonitors},verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=podmonitors,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=servicemonitors,verbs=get;list;watch;update;patch;create;delete
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=subscriptions,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -202,6 +211,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&promv1.Alertmanager{}).
 		Owns(&corev1.Secret{}).
 		Owns(&promv1.PrometheusRule{}).
+		Owns(&promv1.ServiceMonitor{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -323,6 +333,14 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.alertmanagerConfigSecret.Name = alertmanagerConfigSecretName
 	r.alertmanagerConfigSecret.Namespace = r.namespace
 
+	r.k8sMetricsServiceMonitor = &promv1.ServiceMonitor{}
+	r.k8sMetricsServiceMonitor.Name = k8sMetricsServiceMonitorName
+	r.k8sMetricsServiceMonitor.Namespace = r.namespace
+
+	r.k8sMetricsServiceMonitorAuthSecret = &corev1.Secret{}
+	r.k8sMetricsServiceMonitorAuthSecret.Name = k8sMetricsServiceMonitorAuthSecretName
+	r.k8sMetricsServiceMonitorAuthSecret.Namespace = r.namespace
+
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -383,6 +401,12 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileAlertmanagerConfigSecret(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileK8SMetricsServiceMonitorAuthSecret(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileK8SMetricsServiceMonitor(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileMonitoringResources(); err != nil {
@@ -770,6 +794,70 @@ func (r *ManagedOCSReconciler) generateAlertmanagerConfig(pagerdutyServiceKey st
 	return &alertmanagerConfig
 }
 
+func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() error {
+	r.Log.Info("Reconciling k8sMetricsServiceMonitorAuthSecret")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.k8sMetricsServiceMonitorAuthSecret, func() error {
+		if err := r.own(r.k8sMetricsServiceMonitorAuthSecret); err != nil {
+			return err
+		}
+
+		secret := &corev1.Secret{}
+		secret.Name = grafanaDatasourceSecretName
+		secret.Namespace = openshiftMonitoringNamespace
+		if err := r.unrestrictedGet(secret); err != nil {
+			return fmt.Errorf("Failed to get grafana-datasources secret from openshift-monitoring namespace: %v", err)
+		}
+
+		authInfoStructure := struct {
+			DataSources []struct {
+				BasicAuthPassword string `json:"basicAuthPassword"`
+				BasicAuthUser     string `json:"basicAuthUser"`
+			} `json:"datasources"`
+		}{}
+
+		if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
+			return fmt.Errorf("Could not unmarshal Grapana datasource data: %v", err)
+		}
+
+		r.k8sMetricsServiceMonitorAuthSecret.Data = nil
+		for key := range authInfoStructure.DataSources {
+			ds := &authInfoStructure.DataSources[key]
+			if ds.BasicAuthUser == "internal" && ds.BasicAuthPassword != "" {
+				r.k8sMetricsServiceMonitorAuthSecret.Data = map[string][]byte{
+					"Username": []byte(ds.BasicAuthUser),
+					"Password": []byte(ds.BasicAuthPassword),
+				}
+			}
+		}
+		if r.k8sMetricsServiceMonitorAuthSecret.Data == nil {
+			return fmt.Errorf("Grapana datasource does not contain the needed credentials")
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update k8sMetricsServiceMonitorAuthSecret: %v", err)
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitor() error {
+	r.Log.Info("Reconciling k8sMetricsServiceMonitor")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.k8sMetricsServiceMonitor, func() error {
+		if err := r.own(r.k8sMetricsServiceMonitor); err != nil {
+			return err
+		}
+		desired := templates.K8sMetricsServiceMonitorTemplate.DeepCopy()
+		r.k8sMetricsServiceMonitor.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update k8sMetricsServiceMonitor: %v", err)
+	}
+	return nil
+}
+
 // reconcileMonitoringResources labels all monitoring resources (ServiceMonitors, PodMonitors, and PrometheusRules)
 // found in the target namespace with a label that matches the label selector the defined on the Prometheus resource
 // we are reconciling in reconcilePrometheus. Doing so instructs the Prometheus instance to notice and react to these labeled
@@ -1085,4 +1173,12 @@ func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1
 		}
 	}
 	return csv
+}
+
+func (r *ManagedOCSReconciler) unrestrictedGet(obj runtime.Object) error {
+	key, err := client.ObjectKeyFromObject(obj)
+	if err != nil {
+		return err
+	}
+	return r.UnrestrictedClient.Get(r.ctx, key, obj)
 }
