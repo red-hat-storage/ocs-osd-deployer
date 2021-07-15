@@ -45,6 +45,7 @@ rules:
 - apiGroups:
   - monitoring.coreos.com
   resources:
+  - alertmanagerconfigs
   - alertmanagers
   - prometheuses
   verbs:

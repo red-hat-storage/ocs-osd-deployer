@@ -26,8 +26,7 @@ var _3 = int32(3)
 
 var AlertmanagerTemplate = promv1.Alertmanager{
 	Spec: promv1.AlertmanagerSpec{
-		Replicas:     &_3,
-		ConfigSecret: "managed-ocs-alertmanager-config-secret",
-		Resources:    utils.GetResourceRequirements("alertmanager"),
+		Replicas:  &_3,
+		Resources: utils.GetResourceRequirements("alertmanager"),
 	},
 }

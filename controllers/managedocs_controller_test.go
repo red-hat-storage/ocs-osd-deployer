@@ -13,6 +13,7 @@ import (
 	ctrlutils "github.com/openshift/ocs-osd-deployer/utils"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -136,12 +137,11 @@ var _ = Describe("ManagedOCS controller", func() {
 		},
 		Data: map[string][]byte{},
 	}
-	amConfigSecretTemplate := corev1.Secret{
+	amConfigTemplate := promv1a1.AlertmanagerConfig{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      alertmanagerConfigSecretName,
+			Name:      alertmanagerConfigName,
 			Namespace: testPrimaryNamespace,
 		},
-		Data: map[string][]byte{},
 	}
 	addonConfigMapTemplate := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -803,7 +803,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 		})
 		When("there is no pagerduty secret in the cluster", func() {
-			It("should not create alertmanager config secret", func() {
+			It("should not create alertmanager config", func() {
 				// Verify that a pagerduty secret is not present
 				secret := pdSecretTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
@@ -811,11 +811,11 @@ var _ = Describe("ManagedOCS controller", func() {
 				)
 
 				// Ensure, over a period of time, that the resources are not created
-				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("there is no deadmanssnitch secret in the cluster", func() {
-			It("should not create alertmanager config secret", func() {
+			It("should not create alertmanager config", func() {
 				// Verify that a deadman's snitch secret is not present
 				secret := dmsSecretTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
@@ -823,37 +823,37 @@ var _ = Describe("ManagedOCS controller", func() {
 				)
 
 				// Ensure, over a period of time, that the resources are not created
-				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("there is no value for PAGERDUTY_KEY in the pagerduty secret", func() {
-			It("should not create alertmanager config secret", func() {
+			It("should not create alertmanager config", func() {
 				// Create empty pagerduty secret
 				secret := pdSecretTemplate.DeepCopy()
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 				// Ensure, over a period of time, that the resources are not created
-				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 
 				// Remove the secret for future cases
 				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 			})
 		})
 		When("there is no value for SNITCH_URL in the deadmanssnitch secret", func() {
-			It("should not create alertmanager config secret", func() {
+			It("should not create alertmanager config", func() {
 				// Create empty deadman's snitch secret
 				secret := dmsSecretTemplate.DeepCopy()
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 				// Ensure, over a period of time, that the resources are not created
-				utils.EnsureNoResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 
 				// Remove the secret for future cases
 				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 			})
 		})
 		When("there is a value for PAGERDUTY_KEY in the pagerduty secret and a value for SNITCH_URL in the deadmanssnitch secret", func() {
-			It("should create alertmanager config secret", func() {
+			It("should create alertmanager config", func() {
 				// Create pagerduty secret with valid key
 				pdSecret := pdSecretTemplate.DeepCopy()
 				pdSecret.Data["PAGERDUTY_KEY"] = []byte("test-key")
@@ -862,11 +862,11 @@ var _ = Describe("ManagedOCS controller", func() {
 				dmsSecret := dmsSecretTemplate.DeepCopy()
 				dmsSecret.Data["SNITCH_URL"] = []byte("test-key")
 
-				By("Creating an alertmanager config secret")
+				By("Creating an alertmanager config")
 				Expect(k8sClient.Create(ctx, pdSecret)).Should(Succeed())
 				Expect(k8sClient.Create(ctx, dmsSecret)).Should(Succeed())
 
-				utils.WaitForResource(k8sClient, ctx, amConfigSecretTemplate.DeepCopy(), timeout, interval)
+				utils.WaitForResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("a Grafana datasources secret exists in the openshift-monitoring namespace", func() {
