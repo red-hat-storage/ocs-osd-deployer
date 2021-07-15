@@ -12,10 +12,8 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
-ifneq ($(origin OUTPUT_DIR), undefined)
-BUNDLE_OUTPUT_DIR = --output-dir=$(OUTPUT_DIR)
-endif
-BUNDLE_FLAGS ?= $(BUNDLE_OUTPUT_DIR)
+OUTPUT_DIR ?= bundle
+BUNDLE_FLAGS = --output-dir=$(OUTPUT_DIR)
 
 # Image URL to use all building/pushing image targets
 IMG ?= ocs-osd-deployer:latest
@@ -164,8 +162,8 @@ bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
-	cp config/metadata/* bundle/metadata/
-	operator-sdk bundle validate ./bundle
+	cp config/metadata/* $(OUTPUT_DIR)/metadata/
+	operator-sdk bundle validate $(OUTPUT_DIR)
 
 # Build the bundle image.
 .PHONY: bundle-build

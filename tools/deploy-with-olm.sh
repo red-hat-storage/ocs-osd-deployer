@@ -25,7 +25,8 @@ if [[ -z ${IMAGE_REPO} ]]; then
    red "Error: target repository was not set via a command line argument or the IMAGE_REPO environment variable"
    exit 1
 fi
-
+# Default bundle dir
+OUTPUT_DIR=./tools/bundle
 # Bundle image
 BUNDLE_NAME=${BUNDLE_NAME:-ocs-osd-deployer-bundle}
 BUNDLE_VERSION=${BUNDLE_VERSION:-latest}
@@ -41,7 +42,7 @@ TARGET_NAMESPACE=${TARGET_NAMESPACE:-openshift-storage}
 
 # CSV environment variables
 ADDON_NAME=${ADDON_NAME:-ocs-converged}
-BUNDLE_FILE=bundle/manifests/ocs-osd-deployer.clusterserviceversion.yaml
+BUNDLE_FILE=${OUTPUT_DIR}/manifests/ocs-osd-deployer.clusterserviceversion.yaml
 CLUSTER_SIZE=${CLUSTER_SIZE:-1}
 
 # Generate the deployer image 
@@ -51,7 +52,7 @@ exit_on_err make docker-push IMG=${DEPLOYER_IMAGE}
 
 # Generate the olm bundle image
 blue "Generate and push the olm bundle image: ${BUNDLE_IMAGE}"
-exit_on_err make bundle IMG=${DEPLOYER_IMAGE} OUTPUT_DIR=./tools/bundle
+exit_on_err make bundle IMG=${DEPLOYER_IMAGE} OUTPUT_DIR=${OUTPUT_DIR}
 exit_on_err sed -i "s|- name: ADDON_NAME|- {name: ADDON_NAME, value: ${ADDON_NAME}}|" ${BUNDLE_FILE}
 exit_on_err sed -i "s|- name: SOP_ENDPOINT|- {name: SOP_ENDPOINT, value: \'${SOP_ENDPOINT}\'}|" ${BUNDLE_FILE}
 exit_on_err make bundle-build BUNDLE_IMG=${BUNDLE_IMAGE}
