@@ -7,10 +7,12 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 func WaitForResource(k8sClient client.Client, ctx context.Context, obj runtime.Object, timeout time.Duration, interval time.Duration) {
@@ -78,4 +80,29 @@ func ToJsonOrDie(value interface{}) []byte {
 	} else {
 		panic(err)
 	}
+}
+
+func WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(
+	k8sClient client.Client,
+	ctx context.Context,
+	amconfigKey client.ObjectKey,
+	emailadresses []string,
+	receiverName string,
+	timeout time.Duration,
+	interval time.Duration,
+) {
+	EventuallyWithOffset(1, func() string {
+		amconfig := &promv1a1.AlertmanagerConfig{}
+		ExpectWithOffset(2, k8sClient.Get(ctx, amconfigKey, amconfig)).Should(Succeed())
+		for i := range amconfig.Spec.Receivers {
+			reciever := &amconfig.Spec.Receivers[i]
+			if reciever.Name == receiverName {
+				if len(reciever.EmailConfigs) > 0 {
+					return reciever.EmailConfigs[0].To
+				}
+				return ""
+			}
+		}
+		return ""
+	}, timeout, interval).Should(Equal(strings.Join(emailadresses, ", ")))
 }

@@ -15,6 +15,7 @@ package templates
 import (
 	"encoding/json"
 
+	"github.com/openshift/ocs-osd-deployer/utils"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -31,17 +32,55 @@ func convertToApiExtV1JSON(val interface{}) apiextensionsv1.JSON {
 	return out
 }
 
+var _true = true
+
+var pagerdutyAlerts = []string{
+	"CephMdsMissingReplicas",
+	"CephMgrIsAbsent",
+	"CephMgrIsMissingReplicas",
+	"CephNodeDown",
+	"CephClusterErrorState",
+	"CephClusterWarningState",
+	"CephOSDVersionMismatch",
+	"CephMonVersionMismatch",
+	"CephOSDFlapping",
+	"CephOSDDiskNotResponding",
+	"CephOSDDiskUnavailable",
+	"CephDataRecoveryTakingTooLong",
+	"CephPGRepairTakingTooLong",
+	"CephMonQuorumAtRisk",
+	"CephMonHighNumberOfLeaderChanges",
+}
+var smtpAlerts = []string{
+	"CephClusterNearFull",
+	"CephClusterCriticallyFull",
+	"CephClusterReadOnly",
+	"CephOSDCriticallyFull",
+	"CephOSDNearFull",
+	"PersistentVolumeUsageNearFull",
+	"PersistentVolumeUsageCritical",
+}
+
 var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 	Spec: promv1a1.AlertmanagerConfigSpec{
 		Route: &promv1a1.Route{
-			Receiver: "pagerduty",
+			Receiver: "null",
 			Routes: []apiextensionsv1.JSON{
 				convertToApiExtV1JSON(promv1a1.Route{
 					GroupBy:        []string{"alertname"},
 					GroupWait:      "30s",
 					GroupInterval:  "5m",
 					RepeatInterval: "12h",
-					Matchers:       []promv1a1.Matcher{{Name: "severity", Value: "critical"}},
+					Matchers:       []promv1a1.Matcher{{Name: "alertname", Value: utils.GetRegexMatcher(smtpAlerts), Regex: true}},
+					Receiver:       "SendGrid",
+				},
+				),
+				convertToApiExtV1JSON(promv1a1.Route{
+					GroupBy:        []string{"alertname"},
+					GroupWait:      "30s",
+					GroupInterval:  "5m",
+					RepeatInterval: "12h",
+					Matchers:       []promv1a1.Matcher{{Name: "alertname", Value: utils.GetRegexMatcher(pagerdutyAlerts), Regex: true}},
 					Receiver:       "pagerduty",
 				},
 				),
@@ -57,6 +96,8 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 			},
 		},
 		Receivers: []promv1a1.Receiver{{
+			Name: "null",
+		}, {
 			Name: "pagerduty",
 			PagerDutyConfigs: []promv1a1.PagerDutyConfig{{
 				ServiceKey: &corev1.SecretKeySelector{Key: "", LocalObjectReference: corev1.LocalObjectReference{Name: ""}},
@@ -64,6 +105,19 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 			}},
 		}, {
 			Name:           "DeadMansSnitch",
-			WebhookConfigs: []promv1a1.WebhookConfig{{}}}},
+			WebhookConfigs: []promv1a1.WebhookConfig{{}},
+		}, {
+			Name: "SendGrid",
+			EmailConfigs: []promv1a1.EmailConfig{{
+				SendResolved: &_true,
+				Smarthost:    "",
+				From:         "",
+				To:           "",
+				AuthUsername: "",
+				AuthPassword: &corev1.SecretKeySelector{Key: "", LocalObjectReference: corev1.LocalObjectReference{Name: ""}},
+			},
+			},
+		},
+		},
 	},
 }
