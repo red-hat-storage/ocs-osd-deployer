@@ -897,7 +897,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 		})
 		When("the dms prometheus rule resource is deleted", func() {
-			It("should create a new dms prometheus rule in the namespace", func() {
+			It("should create a new dms prometheus rule in the namespace with expected labels", func() {
 				// Ensure prometheus rule existed to begin with
 				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
 
@@ -906,6 +906,13 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Wait for the prometheus rule to be recreated
 				utils.WaitForResource(k8sClient, ctx, dmsPromRuleTemplate.DeepCopy(), timeout, interval)
+
+				// Check labels in prometheus rule
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(&dmsPromRuleTemplate), &dmsPromRuleTemplate)).Should(Succeed())
+
+				Expect(dmsPromRuleTemplate.Spec.Groups[0].Rules[0].Labels["alertname"]).Should(Equal("DeadMansSnitch"))
+				Expect(dmsPromRuleTemplate.Spec.Groups[0].Rules[0].Labels["namespace"]).Should(Equal(testPrimaryNamespace))
+
 			})
 		})
 		When("there is a pod monitor without an ocs-dedicated label", func() {
