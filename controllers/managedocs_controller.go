@@ -638,6 +638,17 @@ func (r *ManagedOCSReconciler) reconcileDMSPrometheusRule() error {
 		}
 
 		desired := templates.DMSPrometheusRuleTemplate.DeepCopy()
+
+		for _, group := range desired.Spec.Groups {
+			if group.Name == "snitch-alert" {
+				for _, rule := range group.Rules {
+					if rule.Alert == "DeadMansSnitch" {
+						rule.Labels["namespace"] = r.namespace
+					}
+				}
+			}
+		}
+
 		r.dmsRule.Spec = desired.Spec
 
 		return nil
