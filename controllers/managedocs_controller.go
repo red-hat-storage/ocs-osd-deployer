@@ -64,6 +64,7 @@ const (
 	dmsRuleName                            = "dms-monitor-rule"
 	storageClassSizeKey                    = "size"
 	enableMCGKey                           = "enable-mcg"
+	notificationEmailKeyPrefix             = "notification-email"
 	deviceSetName                          = "default"
 	storageClassRbdName                    = "ocs-storagecluster-ceph-rbd"
 	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
@@ -92,7 +93,9 @@ type ManagedOCSReconciler struct {
 	DeployerSubscriptionName     string
 	PagerdutySecretName          string
 	DeadMansSnitchSecretName     string
+	SMTPSecretName               string
 	SOPEndpoint                  string
+	AlertSMTPFrom                string
 
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
@@ -100,8 +103,10 @@ type ManagedOCSReconciler struct {
 	prometheus                         *promv1.Prometheus
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
+	addonParamSecret                   *corev1.Secret
 	pagerdutySecret                    *corev1.Secret
 	deadMansSnitchSecret               *corev1.Secret
+	smtpSecret                         *corev1.Secret
 	alertmanagerConfig                 *promv1a1.AlertmanagerConfig
 	k8sMetricsServiceMonitor           *promv1.ServiceMonitor
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
@@ -138,7 +143,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				name := meta.GetName()
 				return name == r.AddonParamSecretName ||
 					name == r.PagerdutySecretName ||
-					name == r.DeadMansSnitchSecretName
+					name == r.DeadMansSnitchSecretName ||
+					name == r.SMTPSecretName
 			},
 		),
 	)
@@ -322,9 +328,17 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.alertmanager.Name = alertmanagerName
 	r.alertmanager.Namespace = r.namespace
 
+	r.addonParamSecret = &corev1.Secret{}
+	r.addonParamSecret.Name = r.AddonParamSecretName
+	r.addonParamSecret.Namespace = r.namespace
+
 	r.pagerdutySecret = &corev1.Secret{}
 	r.pagerdutySecret.Name = r.PagerdutySecretName
 	r.pagerdutySecret.Namespace = r.namespace
+
+	r.smtpSecret = &corev1.Secret{}
+	r.smtpSecret.Name = r.SMTPSecretName
+	r.smtpSecret.Namespace = r.namespace
 
 	r.deadMansSnitchSecret = &corev1.Secret{}
 	r.deadMansSnitchSecret.Name = r.DeadMansSnitchSecretName
@@ -383,6 +397,10 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		r.reconcileStrategy = v1.ReconcileStrategyStrict
 		if strings.EqualFold(string(r.managedOCS.Spec.ReconcileStrategy), string(v1.ReconcileStrategyNone)) {
 			r.reconcileStrategy = v1.ReconcileStrategyNone
+		}
+
+		if err := r.get(r.addonParamSecret); err != nil {
+			return ctrl.Result{}, fmt.Errorf("Failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
 		}
 
 		// Reconcile the different resources
@@ -554,18 +572,8 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 }
 
 func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocsv1.StorageCluster) error {
-	// The addon param secret will contain the capacity of the cluster in Ti
-	// size = 1,  creates a cluster of 1 Ti capacity
-	// size = 2,  creates a cluster of 2 Ti capacity etc
+	addonParams := r.addonParamSecret.Data
 
-	addonParamSecret := &corev1.Secret{}
-	addonParamSecret.Name = r.AddonParamSecretName
-	addonParamSecret.Namespace = r.namespace
-	if err := r.get(addonParamSecret); err != nil {
-		// Do not create the StorageCluster if the we fail to get the addon param secret
-		return fmt.Errorf("Failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
-	}
-	addonParams := addonParamSecret.Data
 	sizeAsString := string(addonParams[storageClassSizeKey])
 	enableMCGRaw, exists := addonParams[enableMCGKey]
 	// Setting hardcoded value here to force no MCG deployment
@@ -747,6 +755,40 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
 		}
 
+		alertingAddressList := []string{}
+		i := 0
+		for {
+			alertingAddress, found := r.addonParamSecret.Data[notificationEmailKeyPrefix+fmt.Sprintf("-%v", i)]
+			i++
+			if found {
+				alertingAddressList = append(alertingAddressList, string(alertingAddress))
+			} else {
+				break
+			}
+		}
+
+		smtpSecretData := map[string][]byte{}
+		if err := r.get(r.smtpSecret); err != nil {
+			return fmt.Errorf("Unable to get SMTP secret: %v", err)
+		}
+		smtpSecretData = r.smtpSecret.Data
+		smtpHost := string(smtpSecretData["host"])
+		if smtpHost == "" {
+			return fmt.Errorf("smtp secret does not contain a host entry")
+		}
+		smtpPort := string(smtpSecretData["port"])
+		if smtpPort == "" {
+			return fmt.Errorf("smtp secret does not contain a port entry")
+		}
+		smtpUsername := string(smtpSecretData["username"])
+		if smtpUsername == "" {
+			return fmt.Errorf("smtp secret does not contain a username entry")
+		}
+		smtpPassword := string(smtpSecretData["password"])
+		if smtpPassword == "" {
+			return fmt.Errorf("smtp secret does not contain a password entry")
+		}
+
 		desired := templates.AlertmanagerConfigTemplate.DeepCopy()
 		for i := range desired.Spec.Receivers {
 			receiver := &desired.Spec.Receivers[i]
@@ -758,6 +800,18 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 				receiver.PagerDutyConfigs[0].Details[0].Value = r.SOPEndpoint
 			case "DeadMansSnitch":
 				receiver.WebhookConfigs[0].URL = &dmsURL
+			case "SendGrid":
+				if len(alertingAddressList) > 0 {
+					receiver.EmailConfigs[0].Smarthost = fmt.Sprintf("%s:%s", smtpHost, smtpPort)
+					receiver.EmailConfigs[0].AuthUsername = smtpUsername
+					receiver.EmailConfigs[0].AuthPassword.LocalObjectReference.Name = r.SMTPSecretName
+					receiver.EmailConfigs[0].AuthPassword.Key = "password"
+					receiver.EmailConfigs[0].From = r.AlertSMTPFrom
+					receiver.EmailConfigs[0].To = strings.Join(alertingAddressList, ", ")
+				} else {
+					r.Log.V(-1).Info("Customer Email for alert notification is not provided")
+					receiver.EmailConfigs = []promv1a1.EmailConfig{}
+				}
 			}
 		}
 		r.alertmanagerConfig.Spec = desired.Spec

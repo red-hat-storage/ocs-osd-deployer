@@ -137,6 +137,13 @@ var _ = Describe("ManagedOCS controller", func() {
 		},
 		Data: map[string][]byte{},
 	}
+	smtpSecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testSMTPSecretName,
+			Namespace: testPrimaryNamespace,
+		},
+		Data: map[string][]byte{},
+	}
 	amConfigTemplate := promv1a1.AlertmanagerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      alertmanagerConfigName,
@@ -353,6 +360,93 @@ var _ = Describe("ManagedOCS controller", func() {
 		}
 	}
 
+	setupAlertmanagerConfigConditions := func(
+		shouldPagerdutySecretExist bool,
+		hasPagerdutyKey bool,
+		shouldDMSSecretExist bool,
+		hasSnitchUrl bool,
+		shouldSMTPSecretExist bool,
+		hasValueForSMTP bool,
+	) {
+		smtpSecret := smtpSecretTemplate.DeepCopy()
+		var smtpSecretExists bool
+		if err := k8sClient.Get(ctx, utils.GetResourceKey(smtpSecret), smtpSecret); err == nil {
+			smtpSecretExists = true
+		} else if errors.IsNotFound(err) {
+			smtpSecretExists = false
+		} else {
+			Expect(err).ToNot(HaveOccurred())
+		}
+		if shouldSMTPSecretExist {
+			if hasValueForSMTP {
+				smtpSecret.Data["host"] = []byte("test-host")
+				smtpSecret.Data["port"] = []byte("20")
+				smtpSecret.Data["username"] = []byte("test-key")
+				smtpSecret.Data["password"] = []byte("test-password")
+			} else {
+				smtpSecret.Data["host"] = []byte("")
+				smtpSecret.Data["port"] = []byte("")
+				smtpSecret.Data["username"] = []byte("")
+				smtpSecret.Data["password"] = []byte("")
+			}
+			if smtpSecretExists {
+				Expect(k8sClient.Update(ctx, smtpSecret)).Should(Succeed())
+			} else {
+				Expect(k8sClient.Create(ctx, smtpSecret)).Should(Succeed())
+			}
+		} else if smtpSecretExists {
+			Expect(k8sClient.Delete(ctx, smtpSecret)).Should(Succeed())
+		}
+
+		dmsSecret := dmsSecretTemplate.DeepCopy()
+		var dmsSecretExists bool
+		if err := k8sClient.Get(ctx, utils.GetResourceKey(dmsSecret), dmsSecret); err == nil {
+			dmsSecretExists = true
+		} else if errors.IsNotFound(err) {
+			dmsSecretExists = false
+		} else {
+			Expect(err).ToNot(HaveOccurred())
+		}
+		if shouldPagerdutySecretExist {
+			if hasSnitchUrl {
+				dmsSecret.Data["SNITCH_URL"] = []byte("test-url")
+			} else {
+				dmsSecret.Data["SNITCH_URL"] = []byte("")
+			}
+			if dmsSecretExists {
+				Expect(k8sClient.Update(ctx, dmsSecret)).Should(Succeed())
+			} else {
+				Expect(k8sClient.Create(ctx, dmsSecret)).Should(Succeed())
+			}
+		} else if dmsSecretExists {
+			Expect(k8sClient.Delete(ctx, dmsSecret)).Should(Succeed())
+		}
+
+		pdSecret := pdSecretTemplate.DeepCopy()
+		var pdSecretExists bool
+		if err := k8sClient.Get(ctx, utils.GetResourceKey(pdSecret), pdSecret); err == nil {
+			pdSecretExists = true
+		} else if errors.IsNotFound(err) {
+			pdSecretExists = false
+		} else {
+			Expect(err).ToNot(HaveOccurred())
+		}
+		if shouldPagerdutySecretExist {
+			if hasPagerdutyKey {
+				pdSecret.Data["PAGERDUTY_KEY"] = []byte("test-key")
+			} else {
+				pdSecret.Data["PAGERDUTY_KEY"] = []byte("")
+			}
+			if pdSecretExists {
+				Expect(k8sClient.Update(ctx, pdSecret)).Should(Succeed())
+			} else {
+				Expect(k8sClient.Create(ctx, pdSecret)).Should(Succeed())
+			}
+		} else if pdSecretExists {
+			Expect(k8sClient.Delete(ctx, pdSecret)).Should(Succeed())
+		}
+	}
+
 	Context("reconcile()", func() {
 		When("there is no add-on parameters secret in the cluster", func() {
 			It("should not create a reconciled resources", func() {
@@ -406,32 +500,6 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Remove the secret for future cases
 				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			})
-		})
-		When("there is a rook-ceph-operator-config ConfigMap", func() {
-			It("should ensure there are RBD CSI resource limits", func() {
-				configMap := rookConfigMapTemplate.DeepCopy()
-				Expect(k8sClient.Create(ctx, configMap)).Should(Succeed())
-
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)
-					if err != nil {
-						return false
-					}
-
-					return configMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != "" &&
-						configMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != "" &&
-						configMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != "" &&
-						configMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != ""
-
-				}, timeout, interval).Should(BeTrue())
-			})
-
-			It("should not modify unrelated configurations", func() {
-				configMap := rookConfigMapTemplate.DeepCopy()
-				Expect(k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)).Should(Succeed())
-
-				Expect(configMap.Data["test-key"]).Should(Equal("test-value"))
 			})
 		})
 		When("there is no enable-mcg field in the add-on parameters secret", func() {
@@ -535,35 +603,6 @@ var _ = Describe("ManagedOCS controller", func() {
 				utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
 			})
 		})
-		When("there is no rook-ceph-operator-config ConfigMap", func() {
-			It("should not create reconciled resources", func() {
-				resList := []runtime.Object{
-					scTemplate.DeepCopy(),
-					promTemplate.DeepCopy(),
-					amTemplate.DeepCopy(),
-				}
-
-				// Delete existing resources
-				for _, object := range resList {
-					Expect(k8sClient.Delete(ctx, object)).Should(Succeed())
-				}
-
-				// Ensure there is no rook-ceph-operator-config ConfigMap present
-				configMap := rookConfigMapTemplate.DeepCopy()
-				Expect(k8sClient.Delete(ctx, configMap)).Should(Succeed())
-
-				// Ensure, over a period of time, that the resources are not created
-				utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
-
-				// Recreate the configMap for other tests.
-				Expect(k8sClient.Create(ctx, configMap)).Should(Succeed())
-
-				// Ensure resources get created again so that other tests work properly
-				for _, object := range resList {
-					utils.WaitForResource(k8sClient, ctx, object, timeout, interval)
-				}
-			})
-		})
 		When("size is increased in the add-on parameters secret", func() {
 			It("should increase storagecluster's storage device set count", func() {
 				secret := addonParamsSecretTemplate.DeepCopy()
@@ -616,6 +655,62 @@ var _ = Describe("ManagedOCS controller", func() {
 					}
 					return ds != nil && ds.Count == 4
 				}, timeout, interval).Should(BeTrue())
+
+				// Revert the size in add-on param secret
+				secret.Data["size"] = []byte("4")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+			})
+		})
+		When("there is a rook-ceph-operator-config ConfigMap", func() {
+			It("should ensure there are RBD CSI resource limits", func() {
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)
+					if err != nil {
+						return false
+					}
+
+					return configMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != "" &&
+						configMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != "" &&
+						configMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != "" &&
+						configMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != ""
+
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			It("should not modify unrelated configurations", func() {
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)).Should(Succeed())
+				Expect(configMap.Data["test-key"]).Should(Equal("test-value"))
+			})
+		})
+		When("there is no rook-ceph-operator-config ConfigMap", func() {
+			It("should not create reconciled resources", func() {
+				resList := []runtime.Object{
+					scTemplate.DeepCopy(),
+					promTemplate.DeepCopy(),
+					amTemplate.DeepCopy(),
+				}
+
+				// Delete existing resources
+				for _, object := range resList {
+					Expect(k8sClient.Delete(ctx, object)).Should(Succeed())
+				}
+
+				// Ensure there is no rook-ceph-operator-config ConfigMap present
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Expect(k8sClient.Delete(ctx, configMap)).Should(Succeed())
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
+
+				// Recreate the configMap for other tests.
+				Expect(k8sClient.Create(ctx, configMap)).Should(Succeed())
+
+				// Ensure resources get created again so that other tests work properly
+				for _, object := range resList {
+					utils.WaitForResource(k8sClient, ctx, object, timeout, interval)
+				}
 			})
 		})
 		When("the storagecluster is not ready", func() {
@@ -890,23 +985,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there is no pagerduty secret in the cluster", func() {
 			It("should not create alertmanager config", func() {
-				// Verify that a pagerduty secret is not present
-				secret := pdSecretTemplate.DeepCopy()
-				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
-					WithTransform(errors.IsNotFound, BeTrue()),
-				)
-
-				// Ensure, over a period of time, that the resources are not created
-				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
-			})
-		})
-		When("there is no deadmanssnitch secret in the cluster", func() {
-			It("should not create alertmanager config", func() {
-				// Verify that a deadman's snitch secret is not present
-				secret := dmsSecretTemplate.DeepCopy()
-				Expect(k8sClient.Get(ctx, utils.GetResourceKey(secret), secret)).Should(
-					WithTransform(errors.IsNotFound, BeTrue()),
-				)
+				setupAlertmanagerConfigConditions(false, false, true, true, true, true)
 
 				// Ensure, over a period of time, that the resources are not created
 				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
@@ -914,43 +993,49 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there is no value for PAGERDUTY_KEY in the pagerduty secret", func() {
 			It("should not create alertmanager config", func() {
-				// Create empty pagerduty secret
-				secret := pdSecretTemplate.DeepCopy()
-				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				setupAlertmanagerConfigConditions(true, false, true, true, true, true)
 
 				// Ensure, over a period of time, that the resources are not created
 				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is no deadmanssnitch secret in the cluster", func() {
+			It("should not create alertmanager config", func() {
+				setupAlertmanagerConfigConditions(true, true, false, false, true, true)
 
-				// Remove the secret for future cases
-				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("there is no value for SNITCH_URL in the deadmanssnitch secret", func() {
 			It("should not create alertmanager config", func() {
-				// Create empty deadman's snitch secret
-				secret := dmsSecretTemplate.DeepCopy()
-				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+				setupAlertmanagerConfigConditions(true, true, true, false, true, true)
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("there is no smtp secret in the cluster", func() {
+			It("should not create alertmanager config", func() {
+				setupAlertmanagerConfigConditions(true, true, true, true, false, false)
 
 				// Ensure, over a period of time, that the resources are not created
 				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 
-				// Remove the secret for future cases
-				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 			})
 		})
-		When("there is a value for PAGERDUTY_KEY in the pagerduty secret and a value for SNITCH_URL in the deadmanssnitch secret", func() {
+		When("there is no value for the keys in smtp secret", func() {
+			It("should not create alertmanager config", func() {
+				setupAlertmanagerConfigConditions(true, true, true, true, true, false)
+
+				// Ensure, over a period of time, that the resources are not created
+				utils.EnsureNoResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
+
+			})
+		})
+		When("All conditions for creating an alertmanager config are met", func() {
 			It("should create alertmanager config", func() {
-				// Create pagerduty secret with valid key
-				pdSecret := pdSecretTemplate.DeepCopy()
-				pdSecret.Data["PAGERDUTY_KEY"] = []byte("test-key")
-
-				// Create deadman's snitch secret with a valid key
-				dmsSecret := dmsSecretTemplate.DeepCopy()
-				dmsSecret.Data["SNITCH_URL"] = []byte("test-key")
-
-				By("Creating an alertmanager config")
-				Expect(k8sClient.Create(ctx, pdSecret)).Should(Succeed())
-				Expect(k8sClient.Create(ctx, dmsSecret)).Should(Succeed())
+				setupAlertmanagerConfigConditions(true, true, true, true, true, true)
 
 				utils.WaitForResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 			})
@@ -1112,6 +1197,127 @@ var _ = Describe("ManagedOCS controller", func() {
 					deployment := ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs[depIndex]
 					return deployment.Spec.Template.Spec.Containers[conIndex].Resources
 				}, timeout, interval).Should(Equal(ctrlutils.GetResourceRequirements("ocs-operator")))
+			})
+		})
+		When("there is a notification email address in the add-on parameter secret and smtp secret", func() {
+			It("should update alertmanager email config with smtp details", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secretKey := utils.GetResourceKey(secret)
+				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
+
+				// Update notification email to the addon param secret
+				secret.Data["notification-email-0"] = []byte("test-0@email.com")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				// Wait for alertmanager to get updated with smtp details
+				amconfig := amConfigTemplate.DeepCopy()
+				amconfigKey := utils.GetResourceKey(amconfig)
+				utils.WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(
+					k8sClient,
+					ctx,
+					amconfigKey,
+					[]string{"test-0@email.com"},
+					"SendGrid",
+					timeout,
+					interval,
+				)
+			})
+		})
+		When("notification email address in the add-on parameter is updated", func() {
+			It("should update alertmanager config with the updated notification email", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secretKey := utils.GetResourceKey(secret)
+				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
+
+				// Update notification email in addon param secret
+				secret.Data["notification-email-0"] = []byte("test-new@email.com")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				// Wait for alertmanager to get updated with smtp details
+				amconfig := amConfigTemplate.DeepCopy()
+				amconfigKey := utils.GetResourceKey(amconfig)
+				utils.WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(
+					k8sClient,
+					ctx,
+					amconfigKey,
+					[]string{"test-new@email.com"},
+					"SendGrid",
+					timeout,
+					interval,
+				)
+			})
+		})
+		When("second notification email addresses is added in add-on parameter", func() {
+			It("should update alertmanager config with the added notification email id", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secretKey := utils.GetResourceKey(secret)
+				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
+
+				// Update notification email in addon param secret
+				secret.Data["notification-email-0"] = []byte("test-0@email.com")
+				secret.Data["notification-email-1"] = []byte("test-1@email.com")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				// Wait for alertmanager to get updated with smtp details
+				amconfig := amConfigTemplate.DeepCopy()
+				amconfigKey := utils.GetResourceKey(amconfig)
+				utils.WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(
+					k8sClient,
+					ctx,
+					amconfigKey,
+					[]string{"test-0@email.com", "test-1@email.com"},
+					"SendGrid",
+					timeout,
+					interval,
+				)
+			})
+		})
+		When("second notification email address in the add-on parameter is removed", func() {
+			It("should update alertmanager config by removing the second email address", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secretKey := utils.GetResourceKey(secret)
+				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
+
+				// remove notification email from addon param secret
+				delete(secret.Data, "notification-email-1")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				// Wait for alertmanager to get updated with smtp details
+				amconfig := amConfigTemplate.DeepCopy()
+				amconfigKey := utils.GetResourceKey(amconfig)
+				utils.WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(
+					k8sClient,
+					ctx,
+					amconfigKey,
+					[]string{"test-0@email.com"},
+					"SendGrid",
+					timeout,
+					interval,
+				)
+			})
+		})
+		When("there is no notification email address in the add-on parameter", func() {
+			It("should update alertmanager config by removing the SMTP email configs", func() {
+				secret := addonParamsSecretTemplate.DeepCopy()
+				secretKey := utils.GetResourceKey(secret)
+				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
+
+				// remove notification email from addon param secret
+				delete(secret.Data, "notification-email-0")
+				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+
+				// Wait for alertmanager to remove the email configs
+				amconfig := amConfigTemplate.DeepCopy()
+				amconfigKey := utils.GetResourceKey(amconfig)
+				utils.WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(
+					k8sClient,
+					ctx,
+					amconfigKey,
+					[]string{},
+					"SendGrid",
+					timeout,
+					interval,
+				)
 			})
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {

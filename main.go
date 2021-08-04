@@ -45,9 +45,10 @@ import (
 )
 
 const (
-	namespaceEnvVarName   = "NAMESPACE"
-	addonNameEnvVarName   = "ADDON_NAME"
-	sopEndpointEnvVarName = "SOP_ENDPOINT"
+	namespaceEnvVarName         = "NAMESPACE"
+	addonNameEnvVarName         = "ADDON_NAME"
+	sopEndpointEnvVarName       = "SOP_ENDPOINT"
+	alertSMTPFromAddrEnvVarName = "ALERT_SMTP_FROM_ADDR"
 )
 
 var (
@@ -120,7 +121,9 @@ func main() {
 		DeployerSubscriptionName:     fmt.Sprintf("addon-%v", addonName),
 		PagerdutySecretName:          fmt.Sprintf("%v-pagerduty", addonName),
 		DeadMansSnitchSecretName:     fmt.Sprintf("%v-deadmanssnitch", addonName),
+		SMTPSecretName:               fmt.Sprintf("%v-smtp", addonName),
 		SOPEndpoint:                  envVars[sopEndpointEnvVarName],
+		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -153,26 +156,19 @@ func getUnrestrictedClient() client.Client {
 }
 
 func readEnvVars() (map[string]string, error) {
-	envVars := map[string]string{}
-
-	val, found := os.LookupEnv(namespaceEnvVarName)
-	if !found {
-		return nil, fmt.Errorf("%s environment variable must be set", namespaceEnvVarName)
-
+	envVars := map[string]string{
+		namespaceEnvVarName:         "",
+		addonNameEnvVarName:         "",
+		sopEndpointEnvVarName:       "",
+		alertSMTPFromAddrEnvVarName: "",
 	}
-	envVars[namespaceEnvVarName] = val
-
-	val, found = os.LookupEnv(addonNameEnvVarName)
-	if !found {
-		return nil, fmt.Errorf("%s environment variable must be set", addonNameEnvVarName)
+	for envVarName := range envVars {
+		val, found := os.LookupEnv(envVarName)
+		if !found {
+			return nil, fmt.Errorf("%s environment variable must be set", envVarName)
+		}
+		envVars[envVarName] = val
 	}
-	envVars[addonNameEnvVarName] = val
-
-	val, found = os.LookupEnv(sopEndpointEnvVarName)
-	if !found {
-		return nil, fmt.Errorf("%s environment variable must be set", sopEndpointEnvVarName)
-	}
-	envVars[sopEndpointEnvVarName] = val
 
 	return envVars, nil
 }

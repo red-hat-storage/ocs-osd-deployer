@@ -42,9 +42,16 @@ TARGET_NAMESPACE=${TARGET_NAMESPACE:-openshift-storage}
 
 # CSV environment variables
 ADDON_NAME=${ADDON_NAME:-ocs-converged}
+ALERT_SMTP_FROM_ADDR=${ALERT_SMTP_FROM_ADDR:-noreply-test@email.com}
 BUNDLE_FILE=${OUTPUT_DIR}/manifests/ocs-osd-deployer.clusterserviceversion.yaml
 CLUSTER_SIZE=${CLUSTER_SIZE:-1}
 ENABLE_MCG_FLAG=${ENABLE_MCG_FLAG:-false}
+
+#SMTP config variables
+[ -z "$NOTIFICATION_EMAIL" ] || NOTIFICATION_EMAIL_OPT="--from-literal notification-email-0=${NOTIFICATION_EMAIL}"
+SMTP_HOST=${SMTP_HOST:-smtp.sendgrid.net}
+SMTP_PORT=${SMTP_PORT:-587}
+SMTP_USERNAME=${SMTP_USERNAME:-apikey}
 
 # Generate the deployer image 
 blue "Generate deployer image: ${DEPLOYER_IMAGE}"
@@ -80,9 +87,10 @@ blue "Creating catalogsource containing needed dependencies on cluster"
 exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f ./tools/yamls/ocs-catalogsource.yaml
 
 blue "Creating secrets needed for the operator to run without error"
-exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic addon-${ADDON_NAME}-parameters --from-literal=size=${CLUSTER_SIZE} --from-literal=enable-mcg=${ENABLE_MCG_FLAG} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
-exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-pagerduty --from-literal=PAGERDUTY_KEY=${PD_KEY} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
-exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-deadmanssnitch --from-literal=SNITCH_URL=${SNITCH_URL} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic addon-${ADDON_NAME}-parameters --from-literal size=${CLUSTER_SIZE} --from-literal enable-mcg=${ENABLE_MCG_FLAG} $NOTIFICATION_EMAIL_OPT --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-pagerduty --from-literal PAGERDUTY_KEY=${PD_KEY} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-deadmanssnitch --from-literal SNITCH_URL=${SNITCH_URL} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
+exit_on_err ${K8S_CLIENT} -n ${TARGET_NAMESPACE} create secret generic ${ADDON_NAME}-smtp --from-literal host=${SMTP_HOST} --from-literal password=${SMTP_KEY} --from-literal port=${SMTP_PORT} --from-literal username=${SMTP_USERNAME} --dry-run=client -o yaml | ${K8S_CLIENT} -n ${TARGET_NAMESPACE} apply -f -
 
 # Deploy the bundle
 blue "Deploy/Run the ${BUNDLE_NAME}:${BUNDLE_VERSION} in the cluster (at ${TARGET_NAMESPACE})"

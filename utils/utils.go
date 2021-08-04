@@ -18,6 +18,7 @@ package utils
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 )
 
 // Contains checks whether a string is contained within a slice
@@ -49,4 +50,9 @@ func AddLabel(obj metav1.Object, key string, value string) {
 		obj.SetLabels(labels)
 	}
 	labels[key] = value
+}
+
+// GetRegexMatcher converts list of alerts to regex matcher
+func GetRegexMatcher(alerts []string) string {
+	return "^" + strings.Join(alerts, "$|^") + "$"
 }

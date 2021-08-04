@@ -56,6 +56,7 @@ const (
 	testAddonParamsSecretName                  = "test-addon-secret"
 	testPagerdutySecretName                    = "test-pagerduty-secret"
 	testDeadMansSnitchSecretName               = "test-deadmanssnitch-secret"
+	testSMTPSecretName                         = "test-smtp-secret"
 	testAddonConfigMapName                     = "test-addon-configmap"
 	testAddonConfigMapDeleteLabelKey           = "test-addon-configmap-delete-label-key"
 	testSubscriptionName                       = "test-subscription"
@@ -122,6 +123,7 @@ var _ = BeforeSuite(func(done Done) {
 		DeployerSubscriptionName:     testSubscriptionName,
 		PagerdutySecretName:          testPagerdutySecretName,
 		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
+		SMTPSecretName:               testSMTPSecretName,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -179,6 +181,15 @@ var _ = BeforeSuite(func(done Done) {
 	managedOCS.Name = managedOCSName
 	managedOCS.Namespace = testPrimaryNamespace
 	Expect(k8sClient.Create(ctx, managedOCS)).ShouldNot(HaveOccurred())
+
+	// Create the rook ceph operator config map
+	rookConfigMap := &corev1.ConfigMap{}
+	rookConfigMap.Name = "rook-ceph-operator-config"
+	rookConfigMap.Namespace = testPrimaryNamespace
+	rookConfigMap.Data = map[string]string{
+		"test-key": "test-value",
+	}
+	Expect(k8sClient.Create(ctx, rookConfigMap)).ShouldNot(HaveOccurred())
 
 	close(done)
 }, 60)
