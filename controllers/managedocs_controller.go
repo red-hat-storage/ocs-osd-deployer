@@ -761,7 +761,10 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			alertingAddress, found := r.addonParamSecret.Data[notificationEmailKeyPrefix+fmt.Sprintf("-%v", i)]
 			i++
 			if found {
-				alertingAddressList = append(alertingAddressList, string(alertingAddress))
+				alertingAddressAsString := string(alertingAddress)
+				if alertingAddressAsString != "" {
+					alertingAddressList = append(alertingAddressList, alertingAddressAsString)
+				}
 			} else {
 				break
 			}
