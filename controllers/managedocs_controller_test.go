@@ -1279,7 +1279,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
 
 				// remove notification email from addon param secret
-				delete(secret.Data, "notification-email-1")
+				secret.Data["notification-email-1"] = []byte("")
 				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 				// Wait for alertmanager to get updated with smtp details
@@ -1303,7 +1303,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Get(ctx, secretKey, secret)).Should(Succeed())
 
 				// remove notification email from addon param secret
-				delete(secret.Data, "notification-email-0")
+				secret.Data["notification-email-0"] = []byte("")
 				Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 				// Wait for alertmanager to remove the email configs
