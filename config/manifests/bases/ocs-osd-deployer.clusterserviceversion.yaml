@@ -17,7 +17,8 @@ spec:
       kind: ManagedOCS
       name: managedocs.ocs.openshift.io
       version: v1alpha1
-  description: Installs and Managed the lifecycle of an OpenShift Container Storage (OCS) instance on an OpenShift dedicated cluster
+  description: Installs and Managed the lifecycle of an OpenShift Container Storage
+    (OCS) instance on an OpenShift dedicated cluster
   displayName: OCS OSD Deployer
   icon:
   - base64data: ""
