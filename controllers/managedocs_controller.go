@@ -298,6 +298,10 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if statusErr != nil {
+		if errors.IsConflict(statusErr) {
+			r.Log.Info("Managedocs CR is being updated, requeing in 10 seconds")
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		}
 		return ctrl.Result{}, statusErr
 	} else {
 		return result, nil
