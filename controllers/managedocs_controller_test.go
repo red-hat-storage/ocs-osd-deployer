@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	openshiftv1 "github.com/openshift/api/network/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	utils "github.com/openshift/ocs-osd-deployer/testutils"
@@ -16,6 +17,7 @@ import (
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -163,6 +165,18 @@ var _ = Describe("ManagedOCS controller", func() {
 		},
 		Data: map[string]string{
 			"test-key": "test-value",
+		},
+	}
+	egressNetworkPolicyTemplate := openshiftv1.EgressNetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      egressNetworkPolicyName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
+	ingressNetworkPolicyTemplate := netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ingressNetworkPolicyName,
+			Namespace: testPrimaryNamespace,
 		},
 	}
 	pvc1StorageClassName := storageClassRbdName
@@ -407,7 +421,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		} else {
 			Expect(err).ToNot(HaveOccurred())
 		}
-		if shouldPagerdutySecretExist {
+		if shouldDMSSecretExist {
 			if hasSnitchUrl {
 				dmsSecret.Data["SNITCH_URL"] = []byte("test-url")
 			} else {
@@ -1318,6 +1332,108 @@ var _ = Describe("ManagedOCS controller", func() {
 					timeout,
 					interval,
 				)
+			})
+		})
+		When("the EgressNetworkPolicy resource is modified", func() {
+			It("should revert the changes and bring the resource back to its managed state", func() {
+				// Get an updated EgressNetworkPolicy
+				egress := egressNetworkPolicyTemplate.DeepCopy()
+				egressKey := utils.GetResourceKey(egress)
+				Expect(k8sClient.Get(ctx, egressKey, egress)).Should(Succeed())
+
+				// Update to empty spec
+				spec := egress.Spec.DeepCopy()
+				egress.Spec = openshiftv1.EgressNetworkPolicySpec{
+					Egress: []openshiftv1.EgressNetworkPolicyRule{},
+				}
+				Expect(k8sClient.Update(ctx, egress)).Should(Succeed())
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() *openshiftv1.EgressNetworkPolicySpec {
+					egress := egressNetworkPolicyTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, egressKey, egress)).Should(Succeed())
+					return &egress.Spec
+				}, timeout, interval).Should(Equal(spec))
+			})
+		})
+		When("the SNITCH_URL value in dms secret is modified", func() {
+			It("should update the EgressNetworkPolicy resource with the new snitch domain", func() {
+				dmsSecret := dmsSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(dmsSecret), dmsSecret)).Should(Succeed())
+				dmsSecret.Data["SNITCH_URL"] = []byte("https://test.in/4a029adb4c")
+				Expect(k8sClient.Update(ctx, dmsSecret)).Should(Succeed())
+
+				Eventually(func() bool {
+					egress := egressNetworkPolicyTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(egress), egress)).Should(Succeed())
+					egressRules := egress.Spec.Egress
+					for i := range egressRules {
+						egressRule := &egressRules[i]
+						if egressRule.To.DNSName == "test.in" {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the host value in smtp secret is modified", func() {
+			It("should update the EgressNetworkPolicy resource with the new host", func() {
+				smtpSecret := smtpSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(smtpSecret), smtpSecret)).Should(Succeed())
+				smtpSecret.Data["host"] = []byte("test-host-2")
+				Expect(k8sClient.Update(ctx, smtpSecret)).Should(Succeed())
+
+				Eventually(func() bool {
+					egress := egressNetworkPolicyTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(egress), egress)).Should(Succeed())
+					egressRules := egress.Spec.Egress
+					for i := range egressRules {
+						egressRule := &egressRules[i]
+						if egressRule.To.DNSName == "test-host-2" {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the EgressNetworkPolicy resource is deleted", func() {
+			It("should create a new EgressNetworkPolicy in the namespace", func() {
+				// Delete the EgressNetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, egressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the EgressNetworkPolicy to be recreated
+				utils.WaitForResource(k8sClient, ctx, egressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("the ingress NetworkPolicy resource is modified", func() {
+			It("should revert the changes and bring the resource back to its managed state", func() {
+				// Get an updated NetworkPolicy
+				ingress := ingressNetworkPolicyTemplate.DeepCopy()
+				ingressKey := utils.GetResourceKey(ingress)
+				Expect(k8sClient.Get(ctx, ingressKey, ingress)).Should(Succeed())
+
+				// Update to empty spec
+				spec := ingress.Spec.DeepCopy()
+				ingress.Spec = netv1.NetworkPolicySpec{}
+				Expect(k8sClient.Update(ctx, ingress)).Should(Succeed())
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() *netv1.NetworkPolicySpec {
+					ingress := ingressNetworkPolicyTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, ingressKey, ingress)).Should(Succeed())
+					return &ingress.Spec
+				}, timeout, interval).Should(Equal(spec))
+			})
+		})
+		When("the ingress NetworkPolicy resource is deleted", func() {
+			It("should create a new ingress NetworkPolicy in the namespace", func() {
+				// Delete the NetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, ingressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the NetworkPolicy to be recreated
+				utils.WaitForResource(k8sClient, ctx, ingressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {

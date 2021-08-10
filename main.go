@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/go-logr/logr"
+	openshiftv1 "github.com/openshift/api/network/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	"github.com/openshift/ocs-osd-deployer/controllers"
@@ -75,6 +76,8 @@ func addAllSchemes(scheme *runtime.Scheme) {
 	utilruntime.Must(v1.AddToScheme(scheme))
 
 	utilruntime.Must(operators.AddToScheme(scheme))
+
+	utilruntime.Must(openshiftv1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 }

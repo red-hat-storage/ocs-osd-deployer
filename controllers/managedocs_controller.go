@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -43,12 +44,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+	openshiftv1 "github.com/openshift/api/network/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
 	"github.com/openshift/ocs-osd-deployer/templates"
 	"github.com/openshift/ocs-osd-deployer/utils"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	netv1 "k8s.io/api/networking/v1"
 )
 
 const (
@@ -70,6 +73,8 @@ const (
 	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
 	deployerCSVPrefix                      = "ocs-osd-deployer"
 	ocsOperatorName                        = "ocs-operator"
+	egressNetworkPolicyName                = "egress-rule"
+	ingressNetworkPolicyName               = "ingress-rule"
 	monLabelKey                            = "app"
 	monLabelValue                          = "managed-ocs"
 	rookConfigMapName                      = "rook-ceph-operator-config"
@@ -100,6 +105,8 @@ type ManagedOCSReconciler struct {
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
 	storageCluster                     *ocsv1.StorageCluster
+	egressNetworkPolicy                *openshiftv1.EgressNetworkPolicy
+	ingressNetworkPolicy               *netv1.NetworkPolicy
 	prometheus                         *promv1.Prometheus
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
@@ -128,6 +135,8 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
+// +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -219,6 +228,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&promv1a1.AlertmanagerConfig{}).
 		Owns(&promv1.PrometheusRule{}).
 		Owns(&promv1.ServiceMonitor{}).
+		Owns(&openshiftv1.EgressNetworkPolicy{}).
+		Owns(&netv1.NetworkPolicy{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -315,6 +326,14 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.storageCluster = &ocsv1.StorageCluster{}
 	r.storageCluster.Name = storageClusterName
 	r.storageCluster.Namespace = r.namespace
+
+	r.egressNetworkPolicy = &openshiftv1.EgressNetworkPolicy{}
+	r.egressNetworkPolicy.Name = egressNetworkPolicyName
+	r.egressNetworkPolicy.Namespace = r.namespace
+
+	r.ingressNetworkPolicy = &netv1.NetworkPolicy{}
+	r.ingressNetworkPolicy.Name = ingressNetworkPolicyName
+	r.ingressNetworkPolicy.Namespace = r.namespace
 
 	r.prometheus = &promv1.Prometheus{}
 	r.prometheus.Name = prometheusName
@@ -435,6 +454,12 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSInitialization(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileEgressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileIngressNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -747,8 +772,10 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			return fmt.Errorf("Pagerduty secret does not contain a PAGERDUTY_KEY entry")
 		}
 
-		if err := r.get(r.deadMansSnitchSecret); err != nil {
-			return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+		if r.deadMansSnitchSecret.UID == "" {
+			if err := r.get(r.deadMansSnitchSecret); err != nil {
+				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+			}
 		}
 		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
 		if dmsURL == "" {
@@ -771,8 +798,10 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 		}
 
 		smtpSecretData := map[string][]byte{}
-		if err := r.get(r.smtpSecret); err != nil {
-			return fmt.Errorf("Unable to get SMTP secret: %v", err)
+		if r.smtpSecret.UID == "" {
+			if err := r.get(r.smtpSecret); err != nil {
+				return fmt.Errorf("Unable to get SMTP secret: %v", err)
+			}
 		}
 		smtpSecretData = r.smtpSecret.Data
 		smtpHost := string(smtpSecretData["host"])
@@ -1047,6 +1076,76 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 
 	}
 
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
+		if err := r.own(r.egressNetworkPolicy); err != nil {
+			return err
+		}
+		desired := templates.EgressNetworkPolicyTemplate.DeepCopy()
+
+		if r.deadMansSnitchSecret.UID == "" {
+			if err := r.get(r.deadMansSnitchSecret); err != nil {
+				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+			}
+		}
+		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
+		if dmsURL == "" {
+			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
+		}
+		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
+		if err != nil {
+			return fmt.Errorf("Unable to parse DMS url: %v", err)
+		}
+
+		if r.smtpSecret.UID == "" {
+			if err := r.get(r.smtpSecret); err != nil {
+				return fmt.Errorf("Unable to get SMTP secret: %v", err)
+			}
+		}
+		smtpHost := string(r.smtpSecret.Data["host"])
+		if smtpHost == "" {
+			return fmt.Errorf("smtp secret does not contain a host entry")
+		}
+
+		dmsEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+		dmsEgressRule.To.DNSName = snitchURL.Hostname()
+		dmsEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+
+		smtpEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+		smtpEgressRule.To.DNSName = smtpHost
+		smtpEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+
+		desired.Spec.Egress = append(
+			[]openshiftv1.EgressNetworkPolicyRule{
+				dmsEgressRule,
+				smtpEgressRule,
+			},
+			desired.Spec.Egress...,
+		)
+		r.egressNetworkPolicy.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update egressNetworkPolicy: %v", err)
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.ingressNetworkPolicy, func() error {
+		if err := r.own(r.ingressNetworkPolicy); err != nil {
+			return err
+		}
+		desired := templates.NetworkPolicyTemplate.DeepCopy()
+		r.ingressNetworkPolicy.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update ingress NetworkPolicy: %v", err)
+	}
 	return nil
 }
 
