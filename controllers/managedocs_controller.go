@@ -95,7 +95,6 @@ type ManagedOCSReconciler struct {
 	AddonParamSecretName         string
 	AddonConfigMapName           string
 	AddonConfigMapDeleteLabelKey string
-	DeployerSubscriptionName     string
 	PagerdutySecretName          string
 	DeadMansSnitchSecretName     string
 	SMTPSecretName               string
@@ -131,7 +130,6 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=podmonitors,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=servicemonitors,verbs=get;list;watch;update;patch;create;delete
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
-// +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=subscriptions,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
@@ -1235,15 +1233,6 @@ func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
 }
 
 func (r *ManagedOCSReconciler) removeOLMComponents() error {
-
-	r.Log.Info("Deleting subscription")
-	subscription := &opv1a1.Subscription{}
-	subscription.Namespace = r.namespace
-	subscription.Name = r.DeployerSubscriptionName
-	if err := r.delete(subscription); err != nil {
-		return fmt.Errorf("unable to delete the deployer subscription: %v", err)
-	}
-	r.Log.Info("deployer subscription removed successfully")
 
 	r.Log.Info("deleting deployer csv")
 	csvList := opv1a1.ClusterServiceVersionList{}

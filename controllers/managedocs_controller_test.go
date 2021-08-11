@@ -215,12 +215,6 @@ var _ = Describe("ManagedOCS controller", func() {
 			},
 		},
 	}
-	subscriptionTemplate := opv1a1.Subscription{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      testSubscriptionName,
-			Namespace: testPrimaryNamespace,
-		},
-	}
 	csvTemplate := opv1a1.ClusterServiceVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testDeployerCSVName,
@@ -1532,14 +1526,6 @@ var _ = Describe("ManagedOCS controller", func() {
 				key := utils.GetResourceKey((managedOCS))
 				Eventually(func() bool {
 					err := k8sClient.Get(ctx, key, managedOCS)
-					return err != nil && errors.IsNotFound(err)
-				}, timeout, interval).Should(BeTrue())
-			})
-			It("should delete the deployer subscription", func() {
-				sub := subscriptionTemplate.DeepCopy()
-				key := utils.GetResourceKey(sub)
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, key, sub)
 					return err != nil && errors.IsNotFound(err)
 				}, timeout, interval).Should(BeTrue())
 			})
