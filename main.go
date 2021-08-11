@@ -121,7 +121,6 @@ func main() {
 		AddonParamSecretName:         fmt.Sprintf("addon-%v-parameters", addonName),
 		AddonConfigMapName:           addonName,
 		AddonConfigMapDeleteLabelKey: fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
-		DeployerSubscriptionName:     fmt.Sprintf("addon-%v", addonName),
 		PagerdutySecretName:          fmt.Sprintf("%v-pagerduty", addonName),
 		DeadMansSnitchSecretName:     fmt.Sprintf("%v-deadmanssnitch", addonName),
 		SMTPSecretName:               fmt.Sprintf("%v-smtp", addonName),

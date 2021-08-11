@@ -60,7 +60,6 @@ const (
 	testSMTPSecretName                         = "test-smtp-secret"
 	testAddonConfigMapName                     = "test-addon-configmap"
 	testAddonConfigMapDeleteLabelKey           = "test-addon-configmap-delete-label-key"
-	testSubscriptionName                       = "test-subscription"
 	testDeployerCSVName                        = "ocs-osd-deployer.x.y.z"
 	testGrafanaFederateSecretName              = "grafana-datasources"
 	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
@@ -124,7 +123,6 @@ var _ = BeforeSuite(func(done Done) {
 		AddonParamSecretName:         testAddonParamsSecretName,
 		AddonConfigMapName:           testAddonConfigMapName,
 		AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
-		DeployerSubscriptionName:     testSubscriptionName,
 		PagerdutySecretName:          testPagerdutySecretName,
 		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
 		SMTPSecretName:               testSMTPSecretName,
@@ -156,13 +154,6 @@ var _ = BeforeSuite(func(done Done) {
 	openshiftMonitoringNS := &corev1.Namespace{}
 	openshiftMonitoringNS.Name = testOpenshiftMonitoringNamespace
 	Expect(k8sClient.Create(ctx, openshiftMonitoringNS)).Should(Succeed())
-
-	// Create a mock subscription
-	deployerSub := &opv1a1.Subscription{}
-	deployerSub.Name = testSubscriptionName
-	deployerSub.Namespace = testPrimaryNamespace
-	deployerSub.Spec = &opv1a1.SubscriptionSpec{}
-	Expect(k8sClient.Create(ctx, deployerSub)).ShouldNot(HaveOccurred())
 
 	// create a mock deplyer CSV
 	deployerCSV := &opv1a1.ClusterServiceVersion{}
