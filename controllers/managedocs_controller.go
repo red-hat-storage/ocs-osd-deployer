@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -47,6 +48,7 @@ import (
 	openshiftv1 "github.com/openshift/api/network/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	metrics "github.com/openshift/ocs-osd-deployer/metrics"
 	"github.com/openshift/ocs-osd-deployer/templates"
 	"github.com/openshift/ocs-osd-deployer/utils"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -83,6 +85,7 @@ const (
 	grafanaDatasourceSecretKey             = "prometheus.yaml"
 	k8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	openshiftMonitoringNamespace           = "openshift-monitoring"
+	additionalRule                         = "additional-prometheus-rule"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -119,6 +122,7 @@ type ManagedOCSReconciler struct {
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
 	namespace                          string
 	reconcileStrategy                  v1.ReconcileStrategy
+	additionalRule                     *promv1.PrometheusRule
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -230,6 +234,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&promv1.ServiceMonitor{}).
 		Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
+		Owns(&promv1.PrometheusRule{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -375,6 +380,10 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.k8sMetricsServiceMonitorAuthSecret.Name = k8sMetricsServiceMonitorAuthSecretName
 	r.k8sMetricsServiceMonitorAuthSecret.Namespace = r.namespace
 
+	r.additionalRule = &promv1.PrometheusRule{}
+	r.additionalRule.Name = additionalRule
+	r.additionalRule.Namespace = r.namespace
+
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -462,6 +471,12 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileIngressNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
+		if err := r.reconcileAdditionalPrometheusRule(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileAdditionalMetrics(); err != nil {
+			return ctrl.Result{}, err
+		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
 
@@ -475,7 +490,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 				r.Log.Info("Found consumer PVCs using OCS storageclasses, cannot proceed on uninstallation")
 				return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 			}
-
 			r.Log.Info("starting OCS uninstallation - deleting managedocs")
 			if err := r.delete(r.managedOCS); err != nil {
 				return ctrl.Result{}, fmt.Errorf("unable to delete managedocs: %v", err)
@@ -1149,6 +1163,29 @@ func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 	return nil
 }
 
+func (r *ManagedOCSReconciler) reconcileAdditionalMetrics() error {
+	if r.checkUninstallCondition() {
+		metrics.ODFAddonPhase.With(
+			prometheus.Labels{
+				"status": "Uninstalling",
+			},
+		).Set(1)
+	} else if r.areComponentsReadyForUninstall() {
+		metrics.ODFAddonPhase.With(
+			prometheus.Labels{
+				"status": "Installed/Running",
+			},
+		).Set(1)
+	} else {
+		metrics.ODFAddonPhase.With(
+			prometheus.Labels{
+				"status": "Installing",
+			},
+		).Set(1)
+	}
+	return nil
+}
+
 func (r *ManagedOCSReconciler) checkUninstallCondition() bool {
 	configmap := &corev1.ConfigMap{}
 	configmap.Name = r.AddonConfigMapName
@@ -1231,6 +1268,37 @@ func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
 			return fmt.Errorf("Failed to update OCS CSV with resource requirements: %v", err)
 		}
 	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileAdditionalPrometheusRule() error {
+	r.Log.Info("Reconciling Additional Prometheus Rule")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.additionalRule, func() error {
+		if err := r.own(r.additionalRule); err != nil {
+			return err
+		}
+
+		desired := templates.AdditionalPrometheusRule.DeepCopy()
+
+		for _, group := range desired.Spec.Groups {
+			if group.Name == "uninstall-stuck-pvc-present" {
+				for _, rule := range group.Rules {
+					if rule.Alert == "UninstallStuckDueToPVC" {
+						rule.Labels["namespace"] = r.namespace
+					}
+				}
+			}
+		}
+
+		r.additionalRule.Spec = desired.Spec
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update additional Prometheus Rule: %v", err)
+	}
+
 	return nil
 }
 

@@ -59,6 +59,7 @@ var smtpAlerts = []string{
 	"CephOSDNearFull",
 	"PersistentVolumeUsageNearFull",
 	"PersistentVolumeUsageCritical",
+	"UninstallStuckDueToPVC",
 }
 
 var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
