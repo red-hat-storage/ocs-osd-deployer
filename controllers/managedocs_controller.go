@@ -795,28 +795,35 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			}
 		}
 
-		smtpSecretData := map[string][]byte{}
-		if r.smtpSecret.UID == "" {
-			if err := r.get(r.smtpSecret); err != nil {
-				return fmt.Errorf("Unable to get SMTP secret: %v", err)
+		var smtpHost string
+		var smtpPort string
+		var smtpUsername string
+		initiateUninstall := r.checkUninstallCondition()
+		// TODO: Remove this check when SMTP secret persists on uninstall
+		if !initiateUninstall {
+			smtpSecretData := map[string][]byte{}
+			if r.smtpSecret.UID == "" {
+				if err := r.get(r.smtpSecret); err != nil {
+					return fmt.Errorf("Unable to get SMTP secret: %v", err)
+				}
 			}
-		}
-		smtpSecretData = r.smtpSecret.Data
-		smtpHost := string(smtpSecretData["host"])
-		if smtpHost == "" {
-			return fmt.Errorf("smtp secret does not contain a host entry")
-		}
-		smtpPort := string(smtpSecretData["port"])
-		if smtpPort == "" {
-			return fmt.Errorf("smtp secret does not contain a port entry")
-		}
-		smtpUsername := string(smtpSecretData["username"])
-		if smtpUsername == "" {
-			return fmt.Errorf("smtp secret does not contain a username entry")
-		}
-		smtpPassword := string(smtpSecretData["password"])
-		if smtpPassword == "" {
-			return fmt.Errorf("smtp secret does not contain a password entry")
+			smtpSecretData = r.smtpSecret.Data
+			smtpHost = string(smtpSecretData["host"])
+			if smtpHost == "" {
+				return fmt.Errorf("smtp secret does not contain a host entry")
+			}
+			smtpPort = string(smtpSecretData["port"])
+			if smtpPort == "" {
+				return fmt.Errorf("smtp secret does not contain a port entry")
+			}
+			smtpUsername = string(smtpSecretData["username"])
+			if smtpUsername == "" {
+				return fmt.Errorf("smtp secret does not contain a username entry")
+			}
+			smtpPassword := string(smtpSecretData["password"])
+			if smtpPassword == "" {
+				return fmt.Errorf("smtp secret does not contain a password entry")
+			}
 		}
 
 		desired := templates.AlertmanagerConfigTemplate.DeepCopy()
@@ -831,7 +838,9 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			case "DeadMansSnitch":
 				receiver.WebhookConfigs[0].URL = &dmsURL
 			case "SendGrid":
-				if len(alertingAddressList) > 0 {
+				// SMTP configs are not set when uninstall is initiated.
+				// TODO: Remove this check when SMTP secret persists on uninstall
+				if len(alertingAddressList) > 0 && !initiateUninstall {
 					receiver.EmailConfigs[0].Smarthost = fmt.Sprintf("%s:%s", smtpHost, smtpPort)
 					receiver.EmailConfigs[0].AuthUsername = smtpUsername
 					receiver.EmailConfigs[0].AuthPassword.LocalObjectReference.Name = r.SMTPSecretName
@@ -839,7 +848,12 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 					receiver.EmailConfigs[0].From = r.AlertSMTPFrom
 					receiver.EmailConfigs[0].To = strings.Join(alertingAddressList, ", ")
 				} else {
-					r.Log.V(-1).Info("Customer Email for alert notification is not provided")
+					// TODO: Remove this check when SMTP secret persists on uninstall
+					if initiateUninstall {
+						r.Log.V(-1).Info("SMTP is not set when uninstall is triggered")
+					} else {
+						r.Log.V(-1).Info("Customer Email for alert notification is not provided")
+					}
 					receiver.EmailConfigs = []promv1a1.EmailConfig{}
 				}
 			}
@@ -1098,28 +1112,37 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			return fmt.Errorf("Unable to parse DMS url: %v", err)
 		}
 
-		if r.smtpSecret.UID == "" {
-			if err := r.get(r.smtpSecret); err != nil {
-				return fmt.Errorf("Unable to get SMTP secret: %v", err)
+		// TODO: Remove this check when SMTP secret persists on uninstall
+		if !r.checkUninstallCondition() {
+			if r.smtpSecret.UID == "" {
+				if err := r.get(r.smtpSecret); err != nil {
+					return fmt.Errorf("Unable to get SMTP secret: %v", err)
+				}
 			}
-		}
-		smtpHost := string(r.smtpSecret.Data["host"])
-		if smtpHost == "" {
-			return fmt.Errorf("smtp secret does not contain a host entry")
+			smtpHost := string(r.smtpSecret.Data["host"])
+			if smtpHost == "" {
+				return fmt.Errorf("smtp secret does not contain a host entry")
+			}
+
+			smtpEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+			smtpEgressRule.To.DNSName = smtpHost
+			smtpEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+
+			desired.Spec.Egress = append(
+				[]openshiftv1.EgressNetworkPolicyRule{
+					smtpEgressRule,
+				},
+				desired.Spec.Egress...,
+			)
 		}
 
 		dmsEgressRule := openshiftv1.EgressNetworkPolicyRule{}
 		dmsEgressRule.To.DNSName = snitchURL.Hostname()
 		dmsEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
 
-		smtpEgressRule := openshiftv1.EgressNetworkPolicyRule{}
-		smtpEgressRule.To.DNSName = smtpHost
-		smtpEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
-
 		desired.Spec.Egress = append(
 			[]openshiftv1.EgressNetworkPolicyRule{
 				dmsEgressRule,
-				smtpEgressRule,
 			},
 			desired.Spec.Egress...,
 		)
