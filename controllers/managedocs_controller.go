@@ -478,6 +478,14 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			if err := r.delete(r.managedOCS); err != nil {
 				return ctrl.Result{}, fmt.Errorf("unable to delete managedocs: %v", err)
 			}
+			// Refreshing local managedOCS object after deletion is scheduled
+			// to avoid conflict while updating status
+			if err := r.get(r.managedOCS); err != nil {
+				if !errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
+				r.Log.V(-1).Info("Trying to reload ManagedOCS resource after delete failed, ManagedOCS resource not found")
+			}
 		}
 
 	} else if initiateUninstall {
