@@ -394,15 +394,15 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 
 	// Set the metric odfms_phase
 	if initiateUninstall {
-		metrics.ODFAddonPhase.With(
+		metrics.ODFMSPhase.With(
 			prometheus.Labels{
-				"status": "Uninstalling",
+				"phase": "Uninstalling",
 			},
 		).Set(1)
 	} else {
-		metrics.ODFAddonPhase.With(
+		metrics.ODFMSPhase.With(
 			prometheus.Labels{
-				"status": "Configuring",
+				"phase": "Configuring",
 			},
 		).Set(1)
 	}
@@ -512,11 +512,12 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 	} else if initiateUninstall {
 		return ctrl.Result{}, r.removeOLMComponents()
 	}
+
 	// Set the metric odfms_phase
 	if !initiateUninstall {
-		metrics.ODFAddonPhase.With(
+		metrics.ODFMSPhase.With(
 			prometheus.Labels{
-				"status": "Ready",
+				"phase": "Ready",
 			},
 		).Set(1)
 	}

@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+// Prom rule to raise an alert if PVCs are using OCS storage classes and uninstall has been initiated
 var AdditionalPrometheusRule = promv1.PrometheusRule{
 	Spec: promv1.PrometheusRuleSpec{
 		Groups: []promv1.RuleGroup{
@@ -31,7 +32,7 @@ var AdditionalPrometheusRule = promv1.PrometheusRule{
 						Alert: "UninstallStuckDueToPVC",
 						Expr: intstr.IntOrString{
 							Type:   intstr.String,
-							StrVal: "count(kube_persistentvolumeclaim_info * on (storageclass)  group_left(provisioner) kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)'}) * max(odf_addon_status{status='Uninstalling'}) > 0",
+							StrVal: "count(kube_persistentvolumeclaim_info * on (storageclass)  group_left(provisioner) kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)'}) * max(odfms_phase{phase='Uninstalling'}) > 0",
 						},
 						Labels: map[string]string{
 							"alertname": "UninstallStuckDueToPVC",

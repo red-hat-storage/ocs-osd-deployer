@@ -23,18 +23,18 @@ import (
 
 var (
 	//Custom gauge metric for Addon status and it has a status label
-	ODFAddonPhase = prometheus.NewGaugeVec(
+	ODFMSPhase = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "odf_addon_status",
+			Name: "odfms_phase",
 			Help: "Shows the lifecycle phase of the addon.",
 		},
 		[]string{
-			"status",
+			"phase",
 		},
 	)
 )
 
 func init() {
 	// Register custom metrics with the global prometheus registry
-	metrics.Registry.MustRegister(ODFAddonPhase)
+	metrics.Registry.MustRegister(ODFMSPhase)
 }
