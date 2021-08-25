@@ -85,7 +85,7 @@ const (
 	grafanaDatasourceSecretKey             = "prometheus.yaml"
 	k8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	openshiftMonitoringNamespace           = "openshift-monitoring"
-	additionalRule                         = "additional-prometheus-rule"
+	additionalRuleName                     = "additional-prometheus-rule"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -381,7 +381,7 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.k8sMetricsServiceMonitorAuthSecret.Namespace = r.namespace
 
 	r.additionalRule = &promv1.PrometheusRule{}
-	r.additionalRule.Name = additionalRule
+	r.additionalRule.Name = additionalRuleName
 	r.additionalRule.Namespace = r.namespace
 
 }
@@ -391,6 +391,22 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 	// We are checking the uninstallation condition before getting the component status
 	// to mitigate scenarios where changes to the component status occurs while the uninstallation logic is running.
 	initiateUninstall := r.checkUninstallCondition()
+
+	// Set the metric odfms_phase
+	if initiateUninstall {
+		metrics.ODFAddonPhase.With(
+			prometheus.Labels{
+				"status": "Uninstalling",
+			},
+		).Set(1)
+	} else {
+		metrics.ODFAddonPhase.With(
+			prometheus.Labels{
+				"status": "Configuring",
+			},
+		).Set(1)
+	}
+
 	// Update the status of the components
 	r.updateComponentStatus()
 
@@ -474,9 +490,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileAdditionalPrometheusRule(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcileAdditionalMetrics(); err != nil {
-			return ctrl.Result{}, err
-		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
 
@@ -498,6 +511,14 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 
 	} else if initiateUninstall {
 		return ctrl.Result{}, r.removeOLMComponents()
+	}
+	// Set the metric odfms_phase
+	if !initiateUninstall {
+		metrics.ODFAddonPhase.With(
+			prometheus.Labels{
+				"status": "Ready",
+			},
+		).Set(1)
 	}
 
 	return ctrl.Result{}, nil
@@ -1163,29 +1184,6 @@ func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) reconcileAdditionalMetrics() error {
-	if r.checkUninstallCondition() {
-		metrics.ODFAddonPhase.With(
-			prometheus.Labels{
-				"status": "Uninstalling",
-			},
-		).Set(1)
-	} else if r.areComponentsReadyForUninstall() {
-		metrics.ODFAddonPhase.With(
-			prometheus.Labels{
-				"status": "Installed/Running",
-			},
-		).Set(1)
-	} else {
-		metrics.ODFAddonPhase.With(
-			prometheus.Labels{
-				"status": "Installing",
-			},
-		).Set(1)
-	}
-	return nil
-}
-
 func (r *ManagedOCSReconciler) checkUninstallCondition() bool {
 	configmap := &corev1.ConfigMap{}
 	configmap.Name = r.AddonConfigMapName
@@ -1282,12 +1280,8 @@ func (r *ManagedOCSReconciler) reconcileAdditionalPrometheusRule() error {
 		desired := templates.AdditionalPrometheusRule.DeepCopy()
 
 		for _, group := range desired.Spec.Groups {
-			if group.Name == "uninstall-stuck-pvc-present" {
-				for _, rule := range group.Rules {
-					if rule.Alert == "UninstallStuckDueToPVC" {
-						rule.Labels["namespace"] = r.namespace
-					}
-				}
+			for _, rule := range group.Rules {
+				rule.Labels["namespace"] = r.namespace
 			}
 		}
 
