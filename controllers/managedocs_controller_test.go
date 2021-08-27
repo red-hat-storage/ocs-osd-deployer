@@ -179,6 +179,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	cephIngressNetworkPolicyTemplate := netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cephIngressNetworkPolicyName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 	pvc1StorageClassName := storageClassRbdName
 	pvc1Template := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1428,6 +1434,35 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Wait for the NetworkPolicy to be recreated
 				utils.WaitForResource(k8sClient, ctx, ingressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+		When("the ceph ingress NetworkPolicy resource is modified", func() {
+			It("should revert the changes and bring the resource back to its managed state", func() {
+				// Get an updated NetworkPolicy
+				cephIngress := cephIngressNetworkPolicyTemplate.DeepCopy()
+				cephIngressKey := utils.GetResourceKey(cephIngress)
+				Expect(k8sClient.Get(ctx, cephIngressKey, cephIngress)).Should(Succeed())
+
+				// Update to empty spec
+				spec := cephIngress.Spec.DeepCopy()
+				cephIngress.Spec = netv1.NetworkPolicySpec{}
+				Expect(k8sClient.Update(ctx, cephIngress)).Should(Succeed())
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() *netv1.NetworkPolicySpec {
+					cephIngress := cephIngressNetworkPolicyTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, cephIngressKey, cephIngress)).Should(Succeed())
+					return &cephIngress.Spec
+				}, timeout, interval).Should(Equal(spec))
+			})
+		})
+		When("the ceph ingress NetworkPolicy resource is deleted", func() {
+			It("should create a new ingress NetworkPolicy in the namespace", func() {
+				// Delete the NetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, cephIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the NetworkPolicy to be recreated
+				utils.WaitForResource(k8sClient, ctx, cephIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {
