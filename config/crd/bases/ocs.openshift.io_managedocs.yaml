@@ -74,12 +74,16 @@ spec:
                 - prometheus
                 - storageCluster
                 type: object
+              phase:
+                description: Phase represents the phase of addon
+                type: string
               reconcileStrategy:
                 description: ReconcileStrategy represent the action the deployer should
                   take whenever a recncile event occures
                 type: string
             required:
             - components
+            - phase
             type: object
         type: object
     served: true

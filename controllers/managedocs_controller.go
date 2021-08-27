@@ -380,6 +380,14 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 	// We are checking the uninstallation condition before getting the component status
 	// to mitigate scenarios where changes to the component status occurs while the uninstallation logic is running.
 	initiateUninstall := r.checkUninstallCondition()
+
+	// Set the phase of managedocs
+	if initiateUninstall {
+		r.managedOCS.Status.Phase = v1.PhaseUninstalling
+	} else {
+		r.managedOCS.Status.Phase = v1.PhaseConfiguring
+	}
+
 	// Update the status of the components
 	r.updateComponentStatus()
 
@@ -490,6 +498,11 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 
 	} else if initiateUninstall {
 		return ctrl.Result{}, r.removeOLMComponents()
+	}
+
+	// Set the phase of managedocs
+	if !initiateUninstall {
+		r.managedOCS.Status.Phase = v1.PhaseReady
 	}
 
 	return ctrl.Result{}, nil

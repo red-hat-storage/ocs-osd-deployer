@@ -33,6 +33,18 @@ const (
 	ReconcileStrategyStrict ReconcileStrategy = "strict"
 )
 
+// Phase represents the phase of addon
+type Phase string
+
+const (
+	// PhaseReady is used when deployer is ready for reconcile operations
+	PhaseReady Phase = "Ready"
+	// PhaseConfiguring is used when deployer is running reconcile operations
+	PhaseConfiguring Phase = "Configuring"
+	// PhaseUninstalling is used when uninstall is initiated
+	PhaseUninstalling Phase = "Uninstalling"
+)
+
 // ManagedOCSSpec defines the desired state of ManagedOCS
 type ManagedOCSSpec struct {
 	ReconcileStrategy ReconcileStrategy `json:"reconcileStrategy,omitempty"`
@@ -61,6 +73,7 @@ type ComponentStatusMap struct {
 type ManagedOCSStatus struct {
 	ReconcileStrategy ReconcileStrategy  `json:"reconcileStrategy,omitempty"`
 	Components        ComponentStatusMap `json:"components"`
+	Phase             Phase              `json:"phase"`
 }
 
 // +kubebuilder:object:root=true
