@@ -1155,6 +1155,12 @@ func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 			return err
 		}
 		desired := templates.NetworkPolicyTemplate.DeepCopy()
+		desired.Spec.Ingress[0].From = []netv1.NetworkPolicyPeer{
+			{
+				PodSelector: &metav1.LabelSelector{},
+			},
+		}
+		desired.Spec.PodSelector = metav1.LabelSelector{}
 		r.ingressNetworkPolicy.Spec = desired.Spec
 		return nil
 	})
@@ -1170,30 +1176,6 @@ func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
 			return err
 		}
 		desired := templates.NetworkPolicyTemplate.DeepCopy()
-		desired.Spec.Ingress[0].From = []netv1.NetworkPolicyPeer{
-			{
-				NamespaceSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"policy-group.network.openshift.io/host-network": "",
-					},
-				},
-			},
-		}
-		desired.Spec.PodSelector = metav1.LabelSelector{
-			MatchExpressions: []metav1.LabelSelectorRequirement{
-				{
-					Key:      "app",
-					Operator: metav1.LabelSelectorOpIn,
-					Values: []string{
-						"rook-ceph-mds",
-						"rook-ceph-osd",
-						"rook-ceph-mgr",
-						"rook-ceph-mon",
-						"rook-ceph-crashcollector",
-					},
-				},
-			},
-		}
 		r.cephIngressNetworkPolicy.Spec = desired.Spec
 		return nil
 	})
