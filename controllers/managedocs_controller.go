@@ -75,6 +75,7 @@ const (
 	ocsOperatorName                        = "ocs-operator"
 	egressNetworkPolicyName                = "egress-rule"
 	ingressNetworkPolicyName               = "ingress-rule"
+	cephIngressNetworkPolicyName           = "ceph-ingress-rule"
 	monLabelKey                            = "app"
 	monLabelValue                          = "managed-ocs"
 	rookConfigMapName                      = "rook-ceph-operator-config"
@@ -106,6 +107,7 @@ type ManagedOCSReconciler struct {
 	storageCluster                     *ocsv1.StorageCluster
 	egressNetworkPolicy                *openshiftv1.EgressNetworkPolicy
 	ingressNetworkPolicy               *netv1.NetworkPolicy
+	cephIngressNetworkPolicy           *netv1.NetworkPolicy
 	prometheus                         *promv1.Prometheus
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
@@ -333,6 +335,10 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.ingressNetworkPolicy.Name = ingressNetworkPolicyName
 	r.ingressNetworkPolicy.Namespace = r.namespace
 
+	r.cephIngressNetworkPolicy = &netv1.NetworkPolicy{}
+	r.cephIngressNetworkPolicy.Name = cephIngressNetworkPolicyName
+	r.cephIngressNetworkPolicy.Namespace = r.namespace
+
 	r.prometheus = &promv1.Prometheus{}
 	r.prometheus.Name = prometheusName
 	r.prometheus.Namespace = r.namespace
@@ -458,6 +464,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -1151,6 +1160,21 @@ func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 	})
 	if err != nil {
 		return fmt.Errorf("Failed to update ingress NetworkPolicy: %v", err)
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.cephIngressNetworkPolicy, func() error {
+		if err := r.own(r.cephIngressNetworkPolicy); err != nil {
+			return err
+		}
+		desired := templates.CephNetworkPolicyTemplate.DeepCopy()
+		r.cephIngressNetworkPolicy.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update ceph ingress NetworkPolicy: %v", err)
 	}
 	return nil
 }
