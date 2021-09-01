@@ -27,6 +27,24 @@ var NetworkPolicyTemplate = netv1.NetworkPolicy{
 			{
 				From: []netv1.NetworkPolicyPeer{
 					{
+						PodSelector: &metav1.LabelSelector{},
+					},
+				},
+			},
+		},
+		PolicyTypes: []netv1.PolicyType{
+			netv1.PolicyTypeIngress,
+		},
+		PodSelector: metav1.LabelSelector{},
+	},
+}
+
+var CephNetworkPolicyTemplate = netv1.NetworkPolicy{
+	Spec: netv1.NetworkPolicySpec{
+		Ingress: []netv1.NetworkPolicyIngressRule{
+			{
+				From: []netv1.NetworkPolicyPeer{
+					{
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
 								"policy-group.network.openshift.io/host-network": "",

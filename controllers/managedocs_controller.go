@@ -1155,12 +1155,6 @@ func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 			return err
 		}
 		desired := templates.NetworkPolicyTemplate.DeepCopy()
-		desired.Spec.Ingress[0].From = []netv1.NetworkPolicyPeer{
-			{
-				PodSelector: &metav1.LabelSelector{},
-			},
-		}
-		desired.Spec.PodSelector = metav1.LabelSelector{}
 		r.ingressNetworkPolicy.Spec = desired.Spec
 		return nil
 	})
@@ -1175,7 +1169,7 @@ func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
 		if err := r.own(r.cephIngressNetworkPolicy); err != nil {
 			return err
 		}
-		desired := templates.NetworkPolicyTemplate.DeepCopy()
+		desired := templates.CephNetworkPolicyTemplate.DeepCopy()
 		r.cephIngressNetworkPolicy.Spec = desired.Spec
 		return nil
 	})
