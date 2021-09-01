@@ -21,13 +21,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var NetworkPolicyTemplate = netv1.NetworkPolicy{
+var CephNetworkPolicyTemplate = netv1.NetworkPolicy{
 	Spec: netv1.NetworkPolicySpec{
 		Ingress: []netv1.NetworkPolicyIngressRule{
 			{
 				From: []netv1.NetworkPolicyPeer{
 					{
-						PodSelector: &metav1.LabelSelector{},
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"policy-group.network.openshift.io/host-network": "",
+							},
+						},
 					},
 				},
 			},
@@ -35,6 +39,20 @@ var NetworkPolicyTemplate = netv1.NetworkPolicy{
 		PolicyTypes: []netv1.PolicyType{
 			netv1.PolicyTypeIngress,
 		},
-		PodSelector: metav1.LabelSelector{},
+		PodSelector: metav1.LabelSelector{
+			MatchExpressions: []metav1.LabelSelectorRequirement{
+				{
+					Key:      "app",
+					Operator: metav1.LabelSelectorOpIn,
+					Values: []string{
+						"rook-ceph-mds",
+						"rook-ceph-osd",
+						"rook-ceph-mgr",
+						"rook-ceph-mon",
+						"rook-ceph-crashcollector",
+					},
+				},
+			},
+		},
 	},
 }
