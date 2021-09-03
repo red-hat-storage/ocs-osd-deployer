@@ -31,3 +31,4 @@ config/manager/kustomization.yaml
 *.swp
 *.swo
 *~
+.vscode
