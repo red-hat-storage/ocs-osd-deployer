@@ -1,5 +1,5 @@
 # Current Operator version
-VERSION ?= 1.0.2
+VERSION ?= 1.1.0
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
