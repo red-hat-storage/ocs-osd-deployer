@@ -1230,6 +1230,15 @@ func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
 	var isChanged bool
 	deployments := csv.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
 	for i := range deployments {
+		deployment := &deployments[i]
+		// Disable noobaa operator by scaling down the replica of noobaa deploymnet
+		// in OCS CSV.
+		if deployment.Name == "noobaa-operator" &&
+			(deployment.Spec.Replicas == nil || *deployment.Spec.Replicas > 0) {
+			zero := int32(0)
+			deployment.Spec.Replicas = &zero
+			isChanged = true
+		}
 		containers := deployments[i].Spec.Template.Spec.Containers
 		for j := range containers {
 			switch container := &containers[j]; container.Name {
