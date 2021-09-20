@@ -44,6 +44,8 @@ spec:
         - name: ADDON_NAME
         - name: SOP_ENDPOINT
         - name: ALERT_SMTP_FROM_ADDR
+        - name: PROMETHEUS_IMAGE
+        - name: ALERTMANAGER_IMAGE
       - name: readiness-server
         command:
         - /readinessServer

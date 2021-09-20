@@ -50,6 +50,8 @@ const (
 	addonNameEnvVarName         = "ADDON_NAME"
 	sopEndpointEnvVarName       = "SOP_ENDPOINT"
 	alertSMTPFromAddrEnvVarName = "ALERT_SMTP_FROM_ADDR"
+	prometheusImageEnvVarName   = "PROMETHEUS_IMAGE"
+	alertmanagerImageEnvVarName = "ALERTMANAGER_IMAGE"
 )
 
 var (
@@ -126,6 +128,8 @@ func main() {
 		SMTPSecretName:               fmt.Sprintf("%v-smtp", addonName),
 		SOPEndpoint:                  envVars[sopEndpointEnvVarName],
 		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
+		PrometheusImage:              envVars[prometheusImageEnvVarName],
+		AlertmanagerImage:            envVars[alertmanagerImageEnvVarName],
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -163,6 +167,8 @@ func readEnvVars() (map[string]string, error) {
 		addonNameEnvVarName:         "",
 		sopEndpointEnvVarName:       "",
 		alertSMTPFromAddrEnvVarName: "",
+		prometheusImageEnvVarName:   "",
+		alertmanagerImageEnvVarName: "",
 	}
 	for envVarName := range envVars {
 		val, found := os.LookupEnv(envVarName)
