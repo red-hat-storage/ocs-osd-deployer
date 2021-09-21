@@ -115,6 +115,10 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 				To:           "",
 				AuthUsername: "",
 				AuthPassword: &corev1.SecretKeySelector{Key: "", LocalObjectReference: corev1.LocalObjectReference{Name: ""}},
+				Headers: []promv1a1.KeyValue{{
+					Key:   "subject",
+					Value: `{{ range .Alerts.Firing }}{{ range .Labels.SortedPairs }}{{ if eq .Name "severity" }}{{ .Value }}{{ end }}{{ end }}{{ end }} alert! Action Required on your managed OpenShift cluster`,
+				}},
 			},
 			},
 		},

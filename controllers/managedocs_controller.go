@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"strconv"
 	"strings"
@@ -835,6 +836,10 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 		if smtpPassword == "" {
 			return fmt.Errorf("smtp secret does not contain a password entry")
 		}
+		smtpHTML, err := ioutil.ReadFile("templates/customernotification.html")
+		if err != nil {
+			return fmt.Errorf("unable to read customernotification.html file: %v", err)
+		}
 
 		desired := templates.AlertmanagerConfigTemplate.DeepCopy()
 		for i := range desired.Spec.Receivers {
@@ -855,6 +860,7 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 					receiver.EmailConfigs[0].AuthPassword.Key = "password"
 					receiver.EmailConfigs[0].From = r.AlertSMTPFrom
 					receiver.EmailConfigs[0].To = strings.Join(alertingAddressList, ", ")
+					receiver.EmailConfigs[0].HTML = string(smtpHTML)
 				} else {
 					r.Log.V(-1).Info("Customer Email for alert notification is not provided")
 					receiver.EmailConfigs = []promv1a1.EmailConfig{}
