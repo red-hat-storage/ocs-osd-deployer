@@ -1,8 +1,8 @@
 dependencies:
 - type: olm.package
   value:
-    packageName: prometheus
-    version: "0.47.0"
+    packageName: ose-prometheus-operator
+    version: "4.8.0"
 - type: olm.package
   value:
     packageName: ocs-operator
