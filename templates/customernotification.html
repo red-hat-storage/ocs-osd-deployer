@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alerts</title>
+</head>
+<body itemscope itemtype="http://schema.org/EmailMessage">
+    <p>
+        Hello!
+        <br><br>
+        This notification is for your OpenShift managed cluster running OpenShift Data Foundation.
+        <br><br>
+        <strong>
+        {{ range .Alerts.Firing }}
+            {{ range .Labels.SortedPairs }}
+                {{ if eq .Name "alertname" }}
+                        {{ if eq .Value "CephClusterCriticallyFull" }}
+                            Your storage cluster utilization has crossed 80% and will become read-only at 85% utilized! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues. It is common to also be alerted to OSD devices entering near-full or full states prior to this alert.
+                        {{ end }}
+                        {{ if eq .Value "CephOSDNearFull" }}
+                            The utilization of an OSD in your cluster has exceeded 75%. Please free up some space or expand the storage cluster if possible. If the OSD reaches 85% utilization it will enter a read-only state and service interruptions are possible.
+                        {{ end }}
+                        {{ if eq .Value "CephOSDCriticallyFull" }}
+                            The utilization of an OSD in your cluster has exceeded 80%. Please free up some space immediately or expand the storage cluster if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                        {{ end }}
+                        {{ if eq .Value "PersistentVolumeUsageNearFull" }}
+                            The utilization of the PVC in your cluster has exceeded 75%. Please free up some space or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                        {{ end }}
+                        {{ if eq .Value "PersistentVolumeUsageCritical" }}
+                            The utilization of the PVC in your cluster has exceeded 85%. Please free up some space immediately or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                        {{ end }}
+                        {{ if eq .Value "CephClusterReadOnly" }}
+                            Your storage cluster utilization has crossed 85% and will become read-only now! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
+                        {{ end }}
+                        {{ if eq .Value "CephClusterNearFull" }}
+                            Your storage cluster utilization has crossed 75% and will become read-only at 85%. Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
+                        {{ end }}
+                        <br>
+                {{ end }}
+            {{ end }}
+        {{ end }}
+        </strong>
+        <br>
+        If you have any questions, please <a href="https://access.redhat.com/support/contact/technicalSupport/">contact us</a>. Review the <a href="https://access.redhat.com/support/policy/support_process">support process</a> for guidance on working with Red Hat support.
+        <br><br>
+        Thank you for choosing Red Hat OpenShift Data Foundation,
+        <br>
+        ODF SRE
+    </p>
+</body>
+</html>

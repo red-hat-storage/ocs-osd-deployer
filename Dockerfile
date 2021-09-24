@@ -29,6 +29,7 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/readinessServer .
+COPY --from=builder /workspace/templates/customernotification.html /templates/
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]
