@@ -87,7 +87,7 @@ const (
 	openshiftMonitoringNamespace           = "openshift-monitoring"
 )
 
-// ManagedOCSReconciler reconciles a ManagedOCS object
+// ManagedOCSReconciler reconciles a ManagedOCS object  
 type ManagedOCSReconciler struct {
 	Client             client.Client
 	UnrestrictedClient client.Client
