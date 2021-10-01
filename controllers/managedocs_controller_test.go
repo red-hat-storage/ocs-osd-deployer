@@ -269,6 +269,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	alertRelabelConfigSecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      alertRelabelConfigSecretName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -765,6 +771,15 @@ var _ = Describe("ManagedOCS controller", func() {
 					Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
 					return managedOCS.Status.Components.StorageCluster.State
 				}, timeout, interval).Should(Equal(v1.ComponentReady))
+			})
+		})
+		When("the alertRelabelConfigSecret resource is deleted", func() {
+			It("should create a new alertRelabelConfigSecret in the namespace", func() {
+				// Delete the alertRelabelConfigSecret resource
+				Expect(k8sClient.Delete(ctx, alertRelabelConfigSecretTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the alertRelabelConfigSecret to be recreated
+				utils.WaitForResource(k8sClient, ctx, alertRelabelConfigSecretTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("prometheus has non-ready replicas", func() {
