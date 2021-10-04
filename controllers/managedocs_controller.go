@@ -86,8 +86,8 @@ const (
 	grafanaDatasourceSecretKey             = "prometheus.yaml"
 	k8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	openshiftMonitoringNamespace           = "openshift-monitoring"
-	alertRelabelConfigName                 = "managed-ocs-alert-relabel-config"
-	alertRelabelConfigKey                  = "alertrelabelconfig.yaml"
+	alertRelabelConfigSecretName           = "managed-ocs-alert-relabel-config-secret"
+	alertRelabelConfigSecretKey            = "alertrelabelconfig.yaml"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object  
@@ -388,7 +388,7 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.k8sMetricsServiceMonitorAuthSecret.Namespace = r.namespace
 
 	r.alertRelabelConfigSecret = &corev1.Secret{}
-	r.alertRelabelConfigSecret.Name = alertRelabelConfigName
+	r.alertRelabelConfigSecret.Name = alertRelabelConfigSecretName
 	r.alertRelabelConfigSecret.Namespace = r.namespace
 
 }
@@ -709,7 +709,7 @@ func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 		}
 
 		r.alertRelabelConfigSecret.Data = map[string][]byte{
-			"alertrelabelconfig.yaml": config,
+			alertRelabelConfigSecretKey: config,
 		}
 
 		return nil
@@ -736,9 +736,9 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace
 		r.prometheus.Spec.AdditionalAlertRelabelConfigs = &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
-				Name: alertRelabelConfigName,
+				Name: alertRelabelConfigSecretName,
 			},
-			Key: alertRelabelConfigKey,
+			Key: alertRelabelConfigSecretKey,
 		}
 
 		if r.PrometheusImage != "" {
