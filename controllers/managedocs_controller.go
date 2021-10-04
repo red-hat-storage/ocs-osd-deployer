@@ -105,8 +105,6 @@ type ManagedOCSReconciler struct {
 	SMTPSecretName               string
 	SOPEndpoint                  string
 	AlertSMTPFrom                string
-	PrometheusImage              string
-	AlertmanagerImage            string
 
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
@@ -743,10 +741,6 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			Key: alertRelabelConfigSecretKey,
 		}
 
-		if r.PrometheusImage != "" {
-			r.prometheus.Spec.Image = &r.PrometheusImage
-		}
-
 		return nil
 	})
 	if err != nil {
@@ -823,10 +817,6 @@ func (r *ManagedOCSReconciler) reconcileAlertmanager() error {
 		}
 		r.alertmanager.Spec = desired.Spec
 		utils.AddLabel(r.alertmanager, monLabelKey, monLabelValue)
-
-		if r.AlertmanagerImage != "" {
-			r.alertmanager.Spec.Image = &r.AlertmanagerImage
-		}
 
 		return nil
 	})
