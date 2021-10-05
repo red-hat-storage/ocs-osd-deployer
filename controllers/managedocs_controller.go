@@ -97,15 +97,15 @@ type ManagedOCSReconciler struct {
 	Log                logr.Logger
 	Scheme             *runtime.Scheme
 
-	AddonParamSecretName             string
-	AddonConfigMapName               string
-	AddonConfigMapDeleteLabelKey     string
-	PagerdutySecretName              string
-	DeadMansSnitchSecretName         string
-	SMTPSecretName                   string
-	SOPEndpoint                      string
-	AlertSMTPFrom                    string
-	CustomerNotificationTemplatePath string
+	AddonParamSecretName         string
+	AddonConfigMapName           string
+	AddonConfigMapDeleteLabelKey string
+	PagerdutySecretName          string
+	DeadMansSnitchSecretName     string
+	SMTPSecretName               string
+	SOPEndpoint                  string
+	AlertSMTPFrom                string
+	TemplatePath                 string
 
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
@@ -892,7 +892,7 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 		if smtpPassword == "" {
 			return fmt.Errorf("smtp secret does not contain a password entry")
 		}
-		smtpHTML, err := ioutil.ReadFile(r.CustomerNotificationTemplatePath)
+		smtpHTML, err := ioutil.ReadFile(r.TemplatePath + "customernotification.html")
 		if err != nil {
 			return fmt.Errorf("unable to read customernotification.html file: %v", err)
 		}
