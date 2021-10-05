@@ -121,6 +121,7 @@ type ManagedOCSReconciler struct {
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
 	namespace                          string
 	reconcileStrategy                  v1.ReconcileStrategy
+	CustomerNotificationTemplate       string
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -836,7 +837,7 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 		if smtpPassword == "" {
 			return fmt.Errorf("smtp secret does not contain a password entry")
 		}
-		smtpHTML, err := ioutil.ReadFile("templates/customernotification.html")
+		smtpHTML, err := ioutil.ReadFile(r.CustomerNotificationTemplate)
 		if err != nil {
 			return fmt.Errorf("unable to read customernotification.html file: %v", err)
 		}
