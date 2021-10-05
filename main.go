@@ -126,7 +126,7 @@ func main() {
 		SMTPSecretName:               fmt.Sprintf("%v-smtp", addonName),
 		SOPEndpoint:                  envVars[sopEndpointEnvVarName],
 		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
-		TemplatePath:                 "templates/",
+		CustomerNotificationHTMLPath: "templates/customernotification.html",
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
