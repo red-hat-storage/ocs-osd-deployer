@@ -102,6 +102,7 @@ type ManagedOCSReconciler struct {
 	SMTPSecretName               string
 	SOPEndpoint                  string
 	AlertSMTPFrom                string
+	CustomerNotificationHTMLPath string
 
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
@@ -836,7 +837,7 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 		if smtpPassword == "" {
 			return fmt.Errorf("smtp secret does not contain a password entry")
 		}
-		smtpHTML, err := ioutil.ReadFile("templates/customernotification.html")
+		smtpHTML, err := ioutil.ReadFile(r.CustomerNotificationHTMLPath)
 		if err != nil {
 			return fmt.Errorf("unable to read customernotification.html file: %v", err)
 		}

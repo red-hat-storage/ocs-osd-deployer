@@ -64,6 +64,7 @@ const (
 	testGrafanaFederateSecretName              = "grafana-datasources"
 	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
+	testCustomerNotificationHTMLPath           = "../templates/customernotification.html"
 )
 
 func TestAPIs(t *testing.T) {
@@ -126,6 +127,7 @@ var _ = BeforeSuite(func(done Done) {
 		PagerdutySecretName:          testPagerdutySecretName,
 		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
 		SMTPSecretName:               testSMTPSecretName,
+		CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
