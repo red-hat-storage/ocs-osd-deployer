@@ -114,19 +114,19 @@ func main() {
 
 	addonName := envVars[addonNameEnvVarName]
 	if err = (&controllers.ManagedOCSReconciler{
-		Client:                       mgr.GetClient(),
-		UnrestrictedClient:           getUnrestrictedClient(),
-		Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:                       mgr.GetScheme(),
-		AddonParamSecretName:         fmt.Sprintf("addon-%v-parameters", addonName),
-		AddonConfigMapName:           addonName,
-		AddonConfigMapDeleteLabelKey: fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
-		PagerdutySecretName:          fmt.Sprintf("%v-pagerduty", addonName),
-		DeadMansSnitchSecretName:     fmt.Sprintf("%v-deadmanssnitch", addonName),
-		SMTPSecretName:               fmt.Sprintf("%v-smtp", addonName),
-		SOPEndpoint:                  envVars[sopEndpointEnvVarName],
-		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
-		CustomerNotificationTemplate: "templates/customernotification.html",
+		Client:                           mgr.GetClient(),
+		UnrestrictedClient:               getUnrestrictedClient(),
+		Log:                              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                           mgr.GetScheme(),
+		AddonParamSecretName:             fmt.Sprintf("addon-%v-parameters", addonName),
+		AddonConfigMapName:               addonName,
+		AddonConfigMapDeleteLabelKey:     fmt.Sprintf("api.openshift.com/addon-%v-delete", addonName),
+		PagerdutySecretName:              fmt.Sprintf("%v-pagerduty", addonName),
+		DeadMansSnitchSecretName:         fmt.Sprintf("%v-deadmanssnitch", addonName),
+		SMTPSecretName:                   fmt.Sprintf("%v-smtp", addonName),
+		SOPEndpoint:                      envVars[sopEndpointEnvVarName],
+		AlertSMTPFrom:                    envVars[alertSMTPFromAddrEnvVarName],
+		CustomerNotificationTemplatePath: "templates/customernotification.html",
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
