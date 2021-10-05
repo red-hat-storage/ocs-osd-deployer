@@ -117,17 +117,17 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&ManagedOCSReconciler{
-		Client:                       k8sManager.GetClient(),
-		UnrestrictedClient:           k8sManager.GetClient(),
-		Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:                       scheme.Scheme,
-		AddonParamSecretName:         testAddonParamsSecretName,
-		AddonConfigMapName:           testAddonConfigMapName,
-		AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
-		PagerdutySecretName:          testPagerdutySecretName,
-		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
-		SMTPSecretName:               testSMTPSecretName,
-		CustomerNotificationTemplate: testCustomerNotificationTemplatePath,
+		Client:                           k8sManager.GetClient(),
+		UnrestrictedClient:               k8sManager.GetClient(),
+		Log:                              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                           scheme.Scheme,
+		AddonParamSecretName:             testAddonParamsSecretName,
+		AddonConfigMapName:               testAddonConfigMapName,
+		AddonConfigMapDeleteLabelKey:     testAddonConfigMapDeleteLabelKey,
+		PagerdutySecretName:              testPagerdutySecretName,
+		DeadMansSnitchSecretName:         testDeadMansSnitchSecretName,
+		SMTPSecretName:                   testSMTPSecretName,
+		CustomerNotificationTemplatePath: testCustomerNotificationTemplatePath,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
