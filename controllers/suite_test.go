@@ -64,7 +64,7 @@ const (
 	testGrafanaFederateSecretName              = "grafana-datasources"
 	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
-	testCustomerNotificationTemplatePath       = "../templates/customernotification.html"
+	testCustomerNotificationTemplatePath       = "../templates/"
 )
 
 func TestAPIs(t *testing.T) {
@@ -117,17 +117,17 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&ManagedOCSReconciler{
-		Client:                           k8sManager.GetClient(),
-		UnrestrictedClient:               k8sManager.GetClient(),
-		Log:                              ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:                           scheme.Scheme,
-		AddonParamSecretName:             testAddonParamsSecretName,
-		AddonConfigMapName:               testAddonConfigMapName,
-		AddonConfigMapDeleteLabelKey:     testAddonConfigMapDeleteLabelKey,
-		PagerdutySecretName:              testPagerdutySecretName,
-		DeadMansSnitchSecretName:         testDeadMansSnitchSecretName,
-		SMTPSecretName:                   testSMTPSecretName,
-		CustomerNotificationTemplatePath: testCustomerNotificationTemplatePath,
+		Client:                       k8sManager.GetClient(),
+		UnrestrictedClient:           k8sManager.GetClient(),
+		Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+		Scheme:                       scheme.Scheme,
+		AddonParamSecretName:         testAddonParamsSecretName,
+		AddonConfigMapName:           testAddonConfigMapName,
+		AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
+		PagerdutySecretName:          testPagerdutySecretName,
+		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
+		SMTPSecretName:               testSMTPSecretName,
+		TemplatePath:                 testCustomerNotificationTemplatePath,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
