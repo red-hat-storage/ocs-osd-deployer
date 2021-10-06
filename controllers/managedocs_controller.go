@@ -687,6 +687,8 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 	return nil
 }
 
+// AlertRelabelConfigSecret will have configuration for relabeling the alerts that are firing.
+// It will add namespace label to firing alerts before they are sent to the alertmanager
 func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 	r.Log.Info("Reconciling alertRelabelConfigSecret")
 
@@ -716,7 +718,7 @@ func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 	})
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to create/update AlertRelabelConfigSecret: %v", err)
 	}
 
 	return nil
