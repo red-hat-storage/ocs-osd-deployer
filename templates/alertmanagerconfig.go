@@ -32,7 +32,7 @@ func convertToApiExtV1JSON(val interface{}) apiextensionsv1.JSON {
 	return out
 }
 
-var _true = true
+var _false = false
 
 var pagerdutyAlerts = []string{
 	"CephMdsMissingReplicas",
@@ -109,7 +109,7 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 		}, {
 			Name: "SendGrid",
 			EmailConfigs: []promv1a1.EmailConfig{{
-				SendResolved: &_true,
+				SendResolved: &_false,
 				Smarthost:    "",
 				From:         "",
 				To:           "",
