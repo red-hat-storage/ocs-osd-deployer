@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/api/equality"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -85,6 +86,8 @@ const (
 	grafanaDatasourceSecretKey             = "prometheus.yaml"
 	k8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	openshiftMonitoringNamespace           = "openshift-monitoring"
+	alertRelabelConfigSecretName           = "managed-ocs-alert-relabel-config-secret"
+	alertRelabelConfigSecretKey            = "alertrelabelconfig.yaml"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object  
@@ -118,6 +121,7 @@ type ManagedOCSReconciler struct {
 	deadMansSnitchSecret               *corev1.Secret
 	smtpSecret                         *corev1.Secret
 	alertmanagerConfig                 *promv1a1.AlertmanagerConfig
+	alertRelabelConfigSecret           *corev1.Secret
 	k8sMetricsServiceMonitor           *promv1.ServiceMonitor
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
 	namespace                          string
@@ -232,6 +236,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&promv1.ServiceMonitor{}).
 		Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
+		Owns(&corev1.Secret{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -381,6 +386,10 @@ func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
 	r.k8sMetricsServiceMonitorAuthSecret.Name = k8sMetricsServiceMonitorAuthSecretName
 	r.k8sMetricsServiceMonitorAuthSecret.Namespace = r.namespace
 
+	r.alertRelabelConfigSecret = &corev1.Secret{}
+	r.alertRelabelConfigSecret.Name = alertRelabelConfigSecretName
+	r.alertRelabelConfigSecret.Namespace = r.namespace
+
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -436,6 +445,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSCSV(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileAlertRelabelConfigSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcilePrometheus(); err != nil {
@@ -674,6 +686,43 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 	return nil
 }
 
+// AlertRelabelConfigSecret will have configuration for relabeling the alerts that are firing.
+// It will add namespace label to firing alerts before they are sent to the alertmanager
+func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
+	r.Log.Info("Reconciling alertRelabelConfigSecret")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.alertRelabelConfigSecret, func() error {
+		if err := r.own(r.alertRelabelConfigSecret); err != nil {
+			return err
+		}
+
+		alertRelabelConfig := []struct {
+			TargetLabel string `yaml:"target_label,omitempty"`
+			Replacement string `yaml:"replacement,omitempty"`
+		}{{
+			TargetLabel: "namespace",
+			Replacement: r.namespace,
+		}}
+
+		config, err := yaml.Marshal(alertRelabelConfig)
+		if err != nil {
+			return fmt.Errorf("Unable to encode alert relabel conifg: %v", err)
+		}
+
+		r.alertRelabelConfigSecret.Data = map[string][]byte{
+			alertRelabelConfigSecretKey: config,
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("Unable to create/update AlertRelabelConfigSecret: %v", err)
+	}
+
+	return nil
+}
+
 func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 	r.Log.Info("Reconciling Prometheus")
 
@@ -686,6 +735,12 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 		r.prometheus.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
 		r.prometheus.Spec = desired.Spec
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace
+		r.prometheus.Spec.AdditionalAlertRelabelConfigs = &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: alertRelabelConfigSecretName,
+			},
+			Key: alertRelabelConfigSecretKey,
+		}
 
 		return nil
 	})
