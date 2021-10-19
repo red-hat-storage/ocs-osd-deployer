@@ -1,7 +1,7 @@
 domain: openshift.io
 layout: go.kubebuilder.io/v2
 projectName: ocs-osd-deployer
-repo: github.com/openshift/ocs-osd-deployer
+repo: github.com/red-hat-storage/ocs-osd-deployer
 resources:
 -
   # TODO(user): Uncomment the below line if this resource implements a controller, else delete it.
@@ -10,7 +10,7 @@ resources:
   group: ocs
   kind: ManagedOCS
   # TODO(user): Update the package path for your API if the below value is incorrect.
-  path: github.com/openshift/ocs-osd-deployer/api/v1alpha1
+  path: github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1
   version: v1alpha1
 version: "3"
 plugins:

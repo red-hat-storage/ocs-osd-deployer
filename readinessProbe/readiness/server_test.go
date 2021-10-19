@@ -6,8 +6,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
-	utils "github.com/openshift/ocs-osd-deployer/testutils"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
+	utils "github.com/red-hat-storage/ocs-osd-deployer/testutils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

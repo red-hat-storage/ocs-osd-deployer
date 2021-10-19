@@ -15,8 +15,8 @@ package templates
 import (
 	"encoding/json"
 
-	"github.com/openshift/ocs-osd-deployer/utils"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )

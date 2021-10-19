@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
-	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

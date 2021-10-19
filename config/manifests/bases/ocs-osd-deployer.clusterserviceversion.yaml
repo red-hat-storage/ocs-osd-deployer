@@ -45,7 +45,7 @@ spec:
   - Storage
   links:
   - name: OCS OSD Deployer
-    url: https://github.com/openshift/ocs-osd-deployer
+    url: https://github.com/red-hat-storage/ocs-osd-deployer
   maintainers:
   - email: omitrani@redhat.com
     name: Ohad Mitrani

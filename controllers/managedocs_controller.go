@@ -48,11 +48,11 @@ import (
 	"github.com/go-logr/logr"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
-	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
-	"github.com/openshift/ocs-osd-deployer/templates"
-	"github.com/openshift/ocs-osd-deployer/utils"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
+	"github.com/red-hat-storage/ocs-osd-deployer/templates"
+	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	netv1 "k8s.io/api/networking/v1"
 )
 
@@ -90,7 +90,7 @@ const (
 	alertRelabelConfigSecretKey            = "alertrelabelconfig.yaml"
 )
 
-// ManagedOCSReconciler reconciles a ManagedOCS object  
+// ManagedOCSReconciler reconciles a ManagedOCS object
 type ManagedOCSReconciler struct {
 	Client             client.Client
 	UnrestrictedClient client.Client
