@@ -55,11 +55,16 @@ var smtpAlerts = []string{
 	"CephClusterNearFull",
 	"CephClusterCriticallyFull",
 	"CephClusterReadOnly",
-	"CephOSDCriticallyFull",
-	"CephOSDNearFull",
 	"PersistentVolumeUsageNearFull",
 	"PersistentVolumeUsageCritical",
 }
+
+// List of silenced alerts
+//
+// OSD Full alerts are silenced as there is no scenario in our static deployment
+// configuration where an OSD is getting full without the cluster getting full.
+// CephOSDCriticallyFull
+// CephOSDNearFull
 
 var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 	Spec: promv1a1.AlertmanagerConfigSpec{
