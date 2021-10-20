@@ -1,4 +1,4 @@
-module github.com/openshift/ocs-osd-deployer
+module github.com/red-hat-storage/ocs-osd-deployer
 
 go 1.15
 

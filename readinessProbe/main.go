@@ -19,8 +19,8 @@ import (
 	"os"
 
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
-	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
-	"github.com/openshift/ocs-osd-deployer/readinessProbe/readiness"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
+	"github.com/red-hat-storage/ocs-osd-deployer/readinessProbe/readiness"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"

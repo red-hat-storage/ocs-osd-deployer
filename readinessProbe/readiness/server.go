@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
-	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

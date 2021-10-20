@@ -37,11 +37,11 @@ import (
 	"github.com/go-logr/logr"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
-	v1 "github.com/openshift/ocs-osd-deployer/api/v1alpha1"
-	"github.com/openshift/ocs-osd-deployer/controllers"
 	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
+	"github.com/red-hat-storage/ocs-osd-deployer/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
