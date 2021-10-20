@@ -1,9 +1,0 @@
----
-# https://yamllint.readthedocs.io/en/stable/configuration.html
-
-extends: default
-rules:
-  indentation:
-    indent-sequences: consistent
-  line-length:
-    allow-non-breakable-inline-mappings: true
