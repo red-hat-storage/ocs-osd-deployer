@@ -171,7 +171,7 @@ endif
 bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	cd config/manifests/bases && $(KUSTOMIZE) edit set namespace $(NAMESPACE) && sed -i 's/olm.skipRange.*$$/olm.skipRange: ">=0.0.1 <$(VERSION)"/' ocs-osd-deployer.clusterserviceversion.yaml && sed -i 's/replaces.*$$/replaces: ocs-osd-deployer.v$(REPLACES)/' ocs-osd-deployer.clusterserviceversion.yaml
+	cd config/manifests/bases && $(KUSTOMIZE) edit set namespace $(NAMESPACE) && $(KUSTOMIZE) edit add annotation --force {olm.skipRange:'>=0.0.1 <$(VERSION)'} && $(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion --patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
 	operator-sdk bundle validate $(OUTPUT_DIR)
