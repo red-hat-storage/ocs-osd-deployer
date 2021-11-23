@@ -3,6 +3,10 @@ VERSION ?= 1.1.3
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+# Default Namespace
+NAMESPACE ?= openshift-storage
+# Default Replaces
+REPLACES ?= 1.1.0
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
@@ -167,6 +171,7 @@ endif
 bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manifests/bases && $(KUSTOMIZE) edit set namespace $(NAMESPACE) && sed -i 's/olm.skipRange.*$$/olm.skipRange: ">=0.0.1 <$(VERSION)"/' ocs-osd-deployer.clusterserviceversion.yaml && sed -i 's/replaces.*$$/replaces: ocs-osd-deployer.v$(REPLACES)/' ocs-osd-deployer.clusterserviceversion.yaml
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
 	operator-sdk bundle validate $(OUTPUT_DIR)
