@@ -3,8 +3,6 @@ VERSION ?= 1.1.3
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
-# Default Namespace
-NAMESPACE ?= openshift-storage
 # Default Replaces
 REPLACES ?= 1.1.0
 # Options for 'bundle-build'
@@ -38,7 +36,7 @@ ARCH = $(shell go env GOARCH)
 all: manager readinessServer
 
 export_env_vars:
-export NAMESPACE = openshift-storage
+export NAMESPACE ?= openshift-storage
 export ADDON_NAME = ocs-converged
 export SOP_ENDPOINT = https://red-hat-storage.github.io/ocs-sop/sop/OSD/{{ .GroupLabels.alertname }}.html
 export ALERT_SMTP_FROM_ADDR = noreply-test@test.com
@@ -170,10 +168,14 @@ endif
 .PHONY: bundle
 bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	cd config/manifests/bases && $(KUSTOMIZE) edit set namespace $(NAMESPACE) && $(KUSTOMIZE) edit add annotation --force {olm.skipRange:'>=0.0.1 <$(VERSION)'} && $(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion --patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
+	cp -r config/manifests config/manifests-temp
+	cd config/manifests-temp && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manifests-temp && $(KUSTOMIZE) edit set namespace $(NAMESPACE)
+	cd config/manifests-temp/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange:>=0.0.1 <$(VERSION)'
+	cd config/manifests-temp/bases && $(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion --patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
+	$(KUSTOMIZE) build config/manifests-temp | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
+	rm -rf config/manifests-temp
 	operator-sdk bundle validate $(OUTPUT_DIR)
 
 # Build the bundle image.
