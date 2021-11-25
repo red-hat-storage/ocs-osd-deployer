@@ -167,13 +167,13 @@ endif
 # Generate bundle manifests and metadata, then validate generated files.
 .PHONY: bundle
 bundle: manifests kustomize
-	rm -rf config/manifests-temp
 	operator-sdk generate kustomize manifests -q
+	rm -rf config/manifests-temp
 	cp -r config/manifests config/manifests-temp
 	cd config/manifests-temp && $(KUSTOMIZE) edit set image controller=$(IMG)
 	cd config/manifests-temp && $(KUSTOMIZE) edit set namespace $(NAMESPACE)
-	cd config/manifests-temp/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange:>=0.0.1 <$(VERSION)'
-	cd config/manifests-temp/bases && $(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion --patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
+	cd config/manifests-temp && $(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion --patch '[{"op": "replace", "path": "/metadata/annotations/olm.skipRange", "value": ">=0.0.1 <$(VERSION)"}]'
+	cd config/manifests-temp && $(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion --patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
 	$(KUSTOMIZE) build config/manifests-temp | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
 	rm -rf config/manifests-temp

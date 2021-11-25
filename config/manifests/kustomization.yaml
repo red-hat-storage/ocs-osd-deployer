@@ -4,4 +4,4 @@ resources:
 - ../default
 - ../samples
 - ../scorecard
-- bases
+- bases/ocs-osd-deployer.clusterserviceversion.yaml
