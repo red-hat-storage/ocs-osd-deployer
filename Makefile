@@ -167,6 +167,7 @@ endif
 # Generate bundle manifests and metadata, then validate generated files.
 .PHONY: bundle
 bundle: manifests kustomize
+	rm -rf config/manifests-temp
 	operator-sdk generate kustomize manifests -q
 	cp -r config/manifests config/manifests-temp
 	cd config/manifests-temp && $(KUSTOMIZE) edit set image controller=$(IMG)
