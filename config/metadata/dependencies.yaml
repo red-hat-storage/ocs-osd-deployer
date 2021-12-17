@@ -6,4 +6,4 @@ dependencies:
 - type: olm.package
   value:
     packageName: ocs-operator
-    version: "4.8.5"
+    version: "4.8.6"
