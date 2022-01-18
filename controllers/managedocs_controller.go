@@ -32,6 +32,7 @@ import (
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -106,6 +107,7 @@ type ManagedOCSReconciler struct {
 	SOPEndpoint                  string
 	AlertSMTPFrom                string
 	CustomerNotificationHTMLPath string
+	DeploymentType               string
 
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
@@ -141,6 +143,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
 
@@ -606,12 +609,16 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 
 		// Handle only strict mode reconciliation
 		if r.reconcileStrategy == v1.ReconcileStrategyStrict {
-			// Get an instance of the desired state
-			desired := templates.StorageClusterTemplate.DeepCopy()
-			if err := r.updateStorageClusterFromAddonParamsSecret(desired); err != nil {
-				return err
+			var desired *ocsv1.StorageCluster = nil
+			switch strings.ToLower(r.DeploymentType) {
+			case "converged":
+				var err error
+				if desired, err = r.getDesiredConvergedStorageCluster(); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("Invalid deployment type value: %v", r.DeploymentType)
 			}
-
 			// Override storage cluster spec with desired spec from the template.
 			// We do not replace meta or status on purpose
 			r.storageCluster.Spec = desired.Spec
@@ -625,7 +632,7 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocsv1.StorageCluster) error {
+func (r *ManagedOCSReconciler) getDesiredConvergedStorageCluster() (*ocsv1.StorageCluster, error) {
 	addonParams := r.addonParamSecret.Data
 
 	sizeAsString := string(addonParams[storageClassSizeKey])
@@ -638,7 +645,7 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 	r.Log.Info("Requested add-on settings", storageClassSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
 	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
 	if err != nil {
-		return fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
+		return nil, fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
 	}
 
 	// Get the storage device set count of the current storage cluster
@@ -651,6 +658,8 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 		}
 	}
 
+	sc := templates.StorageClusterTemplate.DeepCopy()
+
 	var ds *ocsv1.StorageDeviceSet = nil
 	for index := range sc.Spec.StorageDeviceSets {
 		item := &sc.Spec.StorageDeviceSets[index]
@@ -660,7 +669,7 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 		}
 	}
 	if ds == nil {
-		return fmt.Errorf("could not find default device set on stroage cluster")
+		return nil, fmt.Errorf("could not find default device set on stroage cluster")
 	}
 
 	// Prevent downscaling by comparing count from secret and count from storage cluster
@@ -674,7 +683,7 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 	// Check and enable MCG in Storage Cluster spec
 	mcgEnable, err := strconv.ParseBool(enableMCGAsString)
 	if err != nil {
-		return fmt.Errorf("Invalid Enable MCG value: %v", enableMCGAsString)
+		return nil, fmt.Errorf("Invalid Enable MCG value: %v", enableMCGAsString)
 	}
 	if mcgEnable {
 		r.Log.Info("Enabling Multi Cloud Gateway")
@@ -683,7 +692,7 @@ func (r *ManagedOCSReconciler) updateStorageClusterFromAddonParamsSecret(sc *ocs
 		r.Log.V(-1).Info("Trying to disable Multi Cloud Gateway, Invalid operation")
 	}
 
-	return nil
+	return sc, nil
 }
 
 // AlertRelabelConfigSecret will have configuration for relabeling the alerts that are firing.
@@ -1265,14 +1274,32 @@ func (r *ManagedOCSReconciler) areComponentsReadyForUninstall() bool {
 }
 
 func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
+	// get all the storage class
+	storageClassList := storagev1.StorageClassList{}
+	if err := r.UnrestrictedClient.List(r.ctx, &storageClassList); err != nil {
+		return false, fmt.Errorf("unable to list storage classes: %v", err)
+	}
+
+	// create a set of storage class names who are using the OCS provisioner
+	// provisioner name prefixed with the namespace name
+	ocsStorageClass := make(map[string]bool)
+	for i := range storageClassList.Items {
+		storageClass := &storageClassList.Items[i]
+		if strings.HasPrefix(storageClassList.Items[i].Provisioner, r.namespace) {
+			ocsStorageClass[storageClass.Name] = true
+		}
+	}
+
+	// get all the PVCs
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.UnrestrictedClient.List(r.ctx, pvcList)
-	if err != nil {
+	if err := r.UnrestrictedClient.List(r.ctx, pvcList); err != nil {
 		return false, fmt.Errorf("unable to list pvcs: %v", err)
 	}
+
+	// check if there are any PVCs using OCS storage classes
 	for i := range pvcList.Items {
 		scName := *pvcList.Items[i].Spec.StorageClassName
-		if scName == storageClassCephFSName || scName == storageClassRbdName {
+		if ocsStorageClass[scName] {
 			return true, nil
 		}
 	}

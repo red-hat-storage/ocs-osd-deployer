@@ -38,6 +38,7 @@ export NAMESPACE = openshift-storage
 export ADDON_NAME = ocs-converged
 export SOP_ENDPOINT = https://red-hat-storage.github.io/ocs-sop/sop/OSD/{{ .GroupLabels.alertname }}.html
 export ALERT_SMTP_FROM_ADDR = noreply-test@test.com
+export DEPLOYMENT_TYPE = converged
 
 # Run tests
 ENVTEST_ASSETS_DIR = $(shell pwd)/testbin

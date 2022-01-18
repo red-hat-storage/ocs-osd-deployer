@@ -50,6 +50,7 @@ const (
 	addonNameEnvVarName         = "ADDON_NAME"
 	sopEndpointEnvVarName       = "SOP_ENDPOINT"
 	alertSMTPFromAddrEnvVarName = "ALERT_SMTP_FROM_ADDR"
+	deploymentTypeEnvVarName    = "DEPLOYMENT_TYPE"
 )
 
 var (
@@ -126,6 +127,7 @@ func main() {
 		SMTPSecretName:               fmt.Sprintf("%v-smtp", addonName),
 		SOPEndpoint:                  envVars[sopEndpointEnvVarName],
 		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
+		DeploymentType:               envVars[deploymentTypeEnvVarName],
 		CustomerNotificationHTMLPath: "templates/customernotification.html",
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
@@ -164,6 +166,7 @@ func readEnvVars() (map[string]string, error) {
 		addonNameEnvVarName:         "",
 		sopEndpointEnvVarName:       "",
 		alertSMTPFromAddrEnvVarName: "",
+		deploymentTypeEnvVarName:    "",
 	}
 	for envVarName := range envVars {
 		val, found := os.LookupEnv(envVarName)

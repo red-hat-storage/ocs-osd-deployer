@@ -44,6 +44,7 @@ spec:
         - name: ADDON_NAME
         - name: SOP_ENDPOINT
         - name: ALERT_SMTP_FROM_ADDR
+        - name: DEPLOYMENT_TYPE
       - name: readiness-server
         command:
         - /readinessServer
