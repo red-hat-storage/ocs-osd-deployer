@@ -65,6 +65,7 @@ const (
 	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
 	testCustomerNotificationHTMLPath           = "../templates/customernotification.html"
+	testDeploymentType                         = "converged"
 )
 
 func TestAPIs(t *testing.T) {
@@ -128,6 +129,7 @@ var _ = BeforeSuite(func(done Done) {
 		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
 		SMTPSecretName:               testSMTPSecretName,
 		CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
+		DeploymentType:               testDeploymentType,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
