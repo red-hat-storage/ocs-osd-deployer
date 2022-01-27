@@ -233,6 +233,13 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	odfCSVTemplate := opv1a1.ClusterServiceVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      odfOperatorName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
+
 	ocsInitializationTemplate := ocsv1.OCSInitialization{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-ocsinit",
@@ -282,6 +289,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		shouldStorageClusterBeReady bool,
 		shouldPrometheusBeReady bool,
 		shouldAlertmanagerBeReady bool,
+		shouldODFBeReady bool,
 		shouldPVC1Exist bool,
 		shouldPVC2Exist bool,
 	) {
@@ -336,6 +344,16 @@ var _ = Describe("ManagedOCS controller", func() {
 			amSts.Status.ReadyReplicas = 0
 		}
 		Expect(k8sClient.Status().Update(ctx, amSts)).Should(Succeed())
+
+		// Setup odf csv state
+		odfCsv := odfCSVTemplate.DeepCopy()
+		Expect(k8sClient.Get(ctx, utils.GetResourceKey(odfCsv), odfCsv)).Should(Succeed())
+		if shouldODFBeReady {
+			odfCsv.Status.Phase = opv1a1.CSVPhaseSucceeded
+		} else {
+			odfCsv.Status.Phase = opv1a1.CSVPhaseFailed
+		}
+		Expect(k8sClient.Status().Update(ctx, odfCsv)).Should(Succeed())
 
 		// Setup pvc1 state (an rbd backed pvc in the primary namespace)
 		pvc1 := pvc1Template.DeepCopy()
@@ -1482,7 +1500,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(false, testAddonConfigMapDeleteLabelKey, true, true, true, false, false)
+				setupUninstallConditions(false, testAddonConfigMapDeleteLabelKey, true, true, true, true, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1493,7 +1511,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the addon config map does not have a delete label while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, "", true, true, true, false, false)
+				setupUninstallConditions(true, "", true, true, true, true, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1504,7 +1522,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the addon config map does not have a valid delete label while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, "invalid-label", true, true, true, false, false)
+				setupUninstallConditions(true, "invalid-label", true, true, true, true, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1515,7 +1533,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the storagecluster is not ready while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, false, true, true, false, false)
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, false, true, true, true, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1526,7 +1544,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("prometheus is not ready while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, false, true, false, false)
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, false, true, true, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1537,7 +1555,18 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("alertmanager is not ready while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, false, false)
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, true, false, false)
+
+				managedOCS := managedOCSTemplate.DeepCopy()
+				key := utils.GetResourceKey((managedOCS))
+				Consistently(func() error {
+					return k8sClient.Get(ctx, key, managedOCS)
+				}, timeout, interval).Should(Succeed())
+			})
+		})
+		When("ODF CSV is not ready while all other uninstall conditions are met", func() {
+			It("should not delete the managedOCS resource", func() {
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, true, false, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1548,7 +1577,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there are pvcs in the primary namespace while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, true, false)
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, true, true, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1559,7 +1588,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there are pvcs in a secondary namespace while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
-				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, false, true)
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, true, false, true)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))
@@ -1570,7 +1599,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("All uninstall conditions are met", func() {
 			It("should delete the managedOCS", func() {
-				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, true, false, false)
+				setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, true, true, false, false)
 
 				managedOCS := managedOCSTemplate.DeepCopy()
 				key := utils.GetResourceKey((managedOCS))

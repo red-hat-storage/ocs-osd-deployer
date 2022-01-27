@@ -48,6 +48,13 @@ spec:
             properties:
               components:
                 properties:
+                  ODF:
+                    properties:
+                      state:
+                        type: string
+                    required:
+                    - state
+                    type: object
                   alertmanager:
                     properties:
                       state:
@@ -70,6 +77,7 @@ spec:
                     - state
                     type: object
                 required:
+                - ODF
                 - alertmanager
                 - prometheus
                 - storageCluster

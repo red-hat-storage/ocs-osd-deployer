@@ -76,6 +76,7 @@ const (
 	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
 	deployerCSVPrefix                      = "ocs-osd-deployer"
 	ocsOperatorName                        = "ocs-operator"
+	odfOperatorName                        = "odf-operator"
 	egressNetworkPolicyName                = "egress-rule"
 	ingressNetworkPolicyName               = "ingress-rule"
 	cephIngressNetworkPolicyName           = "ceph-ingress-rule"
@@ -206,10 +207,11 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		),
 	)
-	ocsCSVPredicates := builder.WithPredicates(
+	csvPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
 			func(meta metav1.Object, _ runtime.Object) bool {
-				return strings.HasPrefix(meta.GetName(), ocsOperatorName)
+				return strings.HasPrefix(meta.GetName(), ocsOperatorName) ||
+					strings.HasPrefix(meta.GetName(), odfOperatorName)
 			},
 		),
 	)
@@ -279,7 +281,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &opv1a1.ClusterServiceVersion{}},
 			&enqueueManangedOCSRequest,
-			ocsCSVPredicates,
+			csvPredicates,
 		).
 
 		// Create the controller
@@ -587,6 +589,29 @@ func (r *ManagedOCSReconciler) updateComponentStatus() {
 	} else {
 		r.Log.V(-1).Info("error getting Alertmanager, setting compoment status to Unknown")
 		amStatus.State = v1.ComponentUnknown
+	}
+
+	// Getting the status of the ODF CSV
+	odfStatus := &r.managedOCS.Status.Components.ODF
+	csvList := opv1a1.ClusterServiceVersionList{}
+	if err := r.list(&csvList); err != nil {
+		r.Log.Error(err, "unable to list csv resources")
+	}
+	csv := getCSVByPrefix(csvList, odfOperatorName)
+	if csv == nil {
+		odfStatus.State = v1.ComponentNotFound
+	} else {
+		if csv.Status.Phase == opv1a1.CSVPhaseSucceeded {
+			odfStatus.State = v1.ComponentReady
+		} else if csv.Status.Phase == opv1a1.CSVPhasePending ||
+			csv.Status.Phase == opv1a1.CSVPhaseInstallReady ||
+			csv.Status.Phase == opv1a1.CSVPhaseInstalling ||
+			csv.Status.Phase == opv1a1.CSVPhaseReplacing ||
+			csv.Status.Phase == opv1a1.CSVPhaseDeleting {
+			odfStatus.State = v1.ComponentPending
+		} else {
+			odfStatus.State = v1.ComponentUnknown
+		}
 	}
 }
 
@@ -1270,7 +1295,8 @@ func (r *ManagedOCSReconciler) areComponentsReadyForUninstall() bool {
 	subComponents := r.managedOCS.Status.Components
 	return subComponents.StorageCluster.State == v1.ComponentReady &&
 		subComponents.Prometheus.State == v1.ComponentReady &&
-		subComponents.Alertmanager.State == v1.ComponentReady
+		subComponents.Alertmanager.State == v1.ComponentReady &&
+		subComponents.ODF.State == v1.ComponentReady
 }
 
 func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {

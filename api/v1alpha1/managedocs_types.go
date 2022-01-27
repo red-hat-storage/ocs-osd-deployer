@@ -55,6 +55,7 @@ type ComponentStatusMap struct {
 	StorageCluster ComponentStatus `json:"storageCluster"`
 	Prometheus     ComponentStatus `json:"prometheus"`
 	Alertmanager   ComponentStatus `json:"alertmanager"`
+	ODF            ComponentStatus `json:"ODF"`
 }
 
 // ManagedOCSStatus defines the observed state of ManagedOCS

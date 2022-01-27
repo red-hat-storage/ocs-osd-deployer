@@ -25,9 +25,10 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 		storageClusterReady bool,
 		prometheusReady bool,
 		alertmanagerReady bool,
+		odfReady bool,
 	) error {
 
-		var scStatus, prometheusStatus, alertmanagerStatus v1.ComponentState
+		var scStatus, prometheusStatus, alertmanagerStatus, odfStatus v1.ComponentState
 
 		if storageClusterReady == true {
 			scStatus = v1.ComponentReady
@@ -47,6 +48,12 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 			alertmanagerStatus = v1.ComponentPending
 		}
 
+		if odfReady == true {
+			odfStatus = v1.ComponentReady
+		} else {
+			odfStatus = v1.ComponentPending
+		}
+
 		if err := k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS); err != nil {
 			return err
 		}
@@ -62,6 +69,9 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 				Alertmanager: v1.ComponentStatus{
 					State: alertmanagerStatus,
 				},
+				ODF: v1.ComponentStatus{
+					State: odfStatus,
+				},
 			},
 		}
 
@@ -71,7 +81,7 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 	Context("Readiness Probe", func() {
 		When("the managedocs resource lists its StorageCluster as not \"ready\"", func() {
 			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
-				Expect(setupReadinessConditions(false, true, true)).Should(Succeed())
+				Expect(setupReadinessConditions(false, true, true, true)).Should(Succeed())
 
 				status, err := utils.ProbeReadiness()
 				Expect(err).ToNot(HaveOccurred())
@@ -81,7 +91,7 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 
 		When("managedocs reports Prometheus as not \"ready\"", func() {
 			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
-				Expect(setupReadinessConditions(true, false, true)).Should(Succeed())
+				Expect(setupReadinessConditions(true, false, true, true)).Should(Succeed())
 
 				status, err := utils.ProbeReadiness()
 				Expect(err).ToNot(HaveOccurred())
@@ -91,7 +101,17 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 
 		When("managedocs reports Alertmanager as not \"ready\"", func() {
 			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
-				Expect(setupReadinessConditions(true, true, false)).Should(Succeed())
+				Expect(setupReadinessConditions(true, true, false, true)).Should(Succeed())
+
+				status, err := utils.ProbeReadiness()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(status).To(Equal(http.StatusServiceUnavailable))
+			})
+		})
+
+		When("managedocs reports ODF CSV as not \"ready\"", func() {
+			It("should cause the readiness probe to return StatusServiceUnavailable", func() {
+				Expect(setupReadinessConditions(true, true, true, false)).Should(Succeed())
 
 				status, err := utils.ProbeReadiness()
 				Expect(err).ToNot(HaveOccurred())
@@ -101,7 +121,7 @@ var _ = Describe("ManagedOCS readiness probe behavior", func() {
 
 		When("managedocs reports all its components as \"ready\"", func() {
 			It("should cause the readiness probe to return StatusOK", func() {
-				Expect(setupReadinessConditions(true, true, true)).Should(Succeed())
+				Expect(setupReadinessConditions(true, true, true, true)).Should(Succeed())
 
 				status, err := utils.ProbeReadiness()
 				Expect(err).ToNot(HaveOccurred())

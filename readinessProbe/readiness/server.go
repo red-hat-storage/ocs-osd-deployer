@@ -26,7 +26,8 @@ func isReady(client client.Client, managedOCSResource types.NamespacedName) (boo
 
 	ready := managedOCS.Status.Components.StorageCluster.State == v1.ComponentReady &&
 		managedOCS.Status.Components.Prometheus.State == v1.ComponentReady &&
-		managedOCS.Status.Components.Alertmanager.State == v1.ComponentReady
+		managedOCS.Status.Components.Alertmanager.State == v1.ComponentReady &&
+		managedOCS.Status.Components.ODF.State == v1.ComponentReady
 
 	return ready, nil
 }
