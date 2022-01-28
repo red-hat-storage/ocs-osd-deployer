@@ -175,6 +175,14 @@ var _ = BeforeSuite(func(done Done) {
 	ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
 	Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
 
+	// Create a mock MCG CSV
+	mcgCSV := &opv1a1.ClusterServiceVersion{}
+	mcgCSV.Name = mcgOperatorName
+	mcgCSV.Namespace = testPrimaryNamespace
+	mcgCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+	mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{}
+	Expect(k8sClient.Create(ctx, mcgCSV)).ShouldNot(HaveOccurred())
+
 	// Create the ManagedOCS resource
 	managedOCS := &v1.ManagedOCS{}
 	managedOCS.Name = managedOCSName
