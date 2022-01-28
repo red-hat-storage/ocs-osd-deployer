@@ -276,6 +276,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	mcgCSVTemplate := opv1a1.ClusterServiceVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mcgOperatorName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -1232,6 +1238,28 @@ var _ = Describe("ManagedOCS controller", func() {
 					deployment := ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs[depIndex]
 					return deployment.Spec.Template.Spec.Containers[conIndex].Resources
 				}, timeout, interval).Should(Equal(ctrlutils.GetResourceRequirements("ocs-operator")))
+			})
+		})
+		When("replicas for noobaa-operator deployment are checked", func() {
+			It("should have zero replicas", func() {
+				mcgCSV := mcgCSVTemplate.DeepCopy()
+				mcgCSVKey := utils.GetResourceKey(mcgCSV)
+				Expect(k8sClient.Get(ctx, mcgCSVKey, mcgCSV)).Should(Succeed())
+				deployments := mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
+				var index int
+				for i := range deployments {
+					deployment := deployments[i]
+					if deployment.Name == "noobaa-deployment" {
+						index = i
+					}
+				}
+				desiredReplicas := int32(0)
+				Eventually(func() int32 {
+					Expect(k8sClient.Get(ctx, mcgCSVKey, mcgCSV)).Should(Succeed())
+					deployment := mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs[index]
+					return *deployment.Spec.Replicas
+				}, timeout, interval).Should(Equal(desiredReplicas))
+
 			})
 		})
 		When("there is a notification email address in the add-on parameter secret and smtp secret", func() {

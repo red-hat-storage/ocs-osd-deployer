@@ -5,5 +5,5 @@ dependencies:
     version: "4.8.0"
 - type: olm.package
   value:
-    packageName: ocs-operator
-    version: "4.8.6"
+    packageName: odf-operator
+    version: "4.10.0"
