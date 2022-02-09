@@ -6,18 +6,18 @@ import (
 	"net/http"
 	"time"
 
+	"strings"
+
 	. "github.com/onsi/gomega"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
-func WaitForResource(k8sClient client.Client, ctx context.Context, obj runtime.Object, timeout time.Duration, interval time.Duration) {
-	key, err := client.ObjectKeyFromObject(obj)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+func WaitForResource(k8sClient client.Client, ctx context.Context, obj client.Object, timeout time.Duration, interval time.Duration) {
+	key := client.ObjectKeyFromObject(obj)
 
 	EventuallyWithOffset(1, func() bool {
 		err := k8sClient.Get(ctx, key, obj)
@@ -25,20 +25,18 @@ func WaitForResource(k8sClient client.Client, ctx context.Context, obj runtime.O
 	}, timeout, interval).Should(BeTrue())
 }
 
-func EnsureNoResource(k8sClient client.Client, ctx context.Context, obj runtime.Object, timeout time.Duration, interval time.Duration) {
-	key, err := client.ObjectKeyFromObject(obj)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+func EnsureNoResource(k8sClient client.Client, ctx context.Context, obj client.Object, timeout time.Duration, interval time.Duration) {
+	key := client.ObjectKeyFromObject(obj)
 
 	ConsistentlyWithOffset(1, func() bool {
 		return errors.IsNotFound((k8sClient.Get(ctx, key, obj)))
 	}, timeout, interval).Should(BeTrue())
 }
 
-func EnsureNoResources(k8sClient client.Client, ctx context.Context, list []runtime.Object, timeout time.Duration, interval time.Duration) {
+func EnsureNoResources(k8sClient client.Client, ctx context.Context, list []client.Object, timeout time.Duration, interval time.Duration) {
 	ConsistentlyWithOffset(1, func() bool {
 		for i := range list {
-			key, err := client.ObjectKeyFromObject(list[i])
-			ExpectWithOffset(2, err).ToNot(HaveOccurred())
+			key := client.ObjectKeyFromObject(list[i])
 			if !errors.IsNotFound(k8sClient.Get(ctx, key, list[i])) {
 				return false
 			}
@@ -47,13 +45,11 @@ func EnsureNoResources(k8sClient client.Client, ctx context.Context, list []runt
 	}, timeout, interval).Should(BeTrue())
 }
 
-func GetResourceKey(obj runtime.Object) client.ObjectKey {
-	key, err := client.ObjectKeyFromObject(obj)
-	ExpectWithOffset(1, err).ToNot(HaveOccurred())
-	return key
+func GetResourceKey(obj client.Object) client.ObjectKey {
+	return client.ObjectKeyFromObject(obj)
 }
 
-func ResourceHasLabel(k8sClient client.Client, ctx context.Context, obj runtime.Object, labelKey string, labelValue string) bool {
+func ResourceHasLabel(k8sClient client.Client, ctx context.Context, obj client.Object, labelKey string, labelValue string) bool {
 	accessor, err := meta.Accessor(obj)
 	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 

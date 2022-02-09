@@ -37,7 +37,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	ocsv1 "github.com/openshift/ocs-operator/pkg/apis"
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -67,7 +67,7 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{

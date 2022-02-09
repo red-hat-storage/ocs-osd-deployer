@@ -48,9 +48,9 @@ import (
 
 	"github.com/go-logr/logr"
 	openshiftv1 "github.com/openshift/api/network/v1"
-	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
@@ -146,6 +146,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
+// +kubebuilder:rbac:groups="coordination.k8s.io",namespace=system,resources=leases,verbs=create;get;list;watch;update
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -157,8 +158,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	)
 	secretPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				name := meta.GetName()
+			func(client client.Object) bool {
+				name := client.GetName()
 				return name == r.AddonParamSecretName ||
 					name == r.PagerdutySecretName ||
 					name == r.DeadMansSnitchSecretName ||
@@ -168,10 +169,10 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	)
 	configMapPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				name := meta.GetName()
+			func(client client.Object) bool {
+				name := client.GetName()
 				if name == r.AddonConfigMapName {
-					if _, ok := meta.GetLabels()[r.AddonConfigMapDeleteLabelKey]; ok {
+					if _, ok := client.GetLabels()[r.AddonConfigMapDeleteLabelKey]; ok {
 						return true
 					}
 				} else if name == rookConfigMapName {
@@ -183,16 +184,16 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	)
 	monResourcesPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				labels := meta.GetLabels()
+			func(client client.Object) bool {
+				labels := client.GetLabels()
 				return labels == nil || labels[monLabelKey] != monLabelValue
 			},
 		),
 	)
 	monStatefulSetPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				name := meta.GetName()
+			func(client client.Object) bool {
+				name := client.GetName()
 				return name == fmt.Sprintf("prometheus-%s", prometheusName) ||
 					name == fmt.Sprintf("alertmanager-%s", alertmanagerName)
 			},
@@ -200,31 +201,29 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	)
 	prometheusRulesPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				labels := meta.GetLabels()
+			func(client client.Object) bool {
+				labels := client.GetLabels()
 				return labels == nil || labels[monLabelKey] != monLabelValue
 			},
 		),
 	)
 	ocsCSVPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
-			func(meta metav1.Object, _ runtime.Object) bool {
-				return strings.HasPrefix(meta.GetName(), ocsOperatorName)
+			func(client client.Object) bool {
+				return strings.HasPrefix(client.GetName(), ocsOperatorName)
 			},
 		),
 	)
-	enqueueManangedOCSRequest := handler.EnqueueRequestsFromMapFunc{
-		ToRequests: handler.ToRequestsFunc(
-			func(obj handler.MapObject) []reconcile.Request {
-				return []reconcile.Request{{
-					NamespacedName: types.NamespacedName{
-						Name:      managedOCSName,
-						Namespace: obj.Meta.GetNamespace(),
-					},
-				}}
-			},
-		),
-	}
+	enqueueManangedOCSRequest := handler.EnqueueRequestsFromMapFunc(
+		func(client client.Object) []reconcile.Request {
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Name:      managedOCSName,
+					Namespace: client.GetNamespace(),
+				},
+			}}
+		},
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(ctrlOptions).
@@ -244,41 +243,41 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch non-owned resources
 		Watches(
 			&source.Kind{Type: &corev1.Secret{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			secretPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &corev1.ConfigMap{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			configMapPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &promv1.PodMonitor{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			monResourcesPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &promv1.ServiceMonitor{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			monResourcesPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &promv1.PrometheusRule{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			prometheusRulesPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &appsv1.StatefulSet{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			monStatefulSetPredicates,
 		).
 		Watches(
 			&source.Kind{Type: &ocsv1.OCSInitialization{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 		).
 		Watches(
 			&source.Kind{Type: &opv1a1.ClusterServiceVersion{}},
-			&enqueueManangedOCSRequest,
+			enqueueManangedOCSRequest,
 			ocsCSVPredicates,
 		).
 
@@ -287,12 +286,12 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // Reconcile changes to all owned resource based on the infromation provided by the ManagedOCS resource
-func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ManagedOCSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("req.Namespace", req.Namespace, "req.Name", req.Name)
 	log.Info("Starting reconcile for ManagedOCS")
 
 	// Initalize the reconciler properties from the request
-	r.initReconciler(req)
+	r.initReconciler(ctx, req)
 
 	// Load the managed ocs resource (input)
 	if err := r.get(r.managedOCS); err != nil {
@@ -325,8 +324,8 @@ func (r *ManagedOCSReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	}
 }
 
-func (r *ManagedOCSReconciler) initReconciler(req ctrl.Request) {
-	r.ctx = context.Background()
+func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Request) {
+	r.ctx = ctx
 	r.namespace = req.NamespacedName.Namespace
 
 	r.managedOCS = &v1.ManagedOCS{}
@@ -1381,24 +1380,21 @@ func (r *ManagedOCSReconciler) removeOLMComponents() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) get(obj runtime.Object) error {
-	key, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return err
-	}
+func (r *ManagedOCSReconciler) get(obj client.Object) error {
+	key := client.ObjectKeyFromObject(obj)
 	return r.Client.Get(r.ctx, key, obj)
 }
 
-func (r *ManagedOCSReconciler) list(obj runtime.Object) error {
+func (r *ManagedOCSReconciler) list(obj client.ObjectList) error {
 	listOptions := client.InNamespace(r.namespace)
 	return r.Client.List(r.ctx, obj, listOptions)
 }
 
-func (r *ManagedOCSReconciler) update(obj runtime.Object) error {
+func (r *ManagedOCSReconciler) update(obj client.Object) error {
 	return r.Client.Update(r.ctx, obj)
 }
 
-func (r *ManagedOCSReconciler) delete(obj runtime.Object) error {
+func (r *ManagedOCSReconciler) delete(obj client.Object) error {
 	if err := r.Client.Delete(r.ctx, obj); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
@@ -1425,10 +1421,7 @@ func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1
 	return csv
 }
 
-func (r *ManagedOCSReconciler) unrestrictedGet(obj runtime.Object) error {
-	key, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return err
-	}
+func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {
+	key := client.ObjectKeyFromObject(obj)
 	return r.UnrestrictedClient.Get(r.ctx, key, obj)
 }
