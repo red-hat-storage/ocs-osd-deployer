@@ -175,6 +175,14 @@ var _ = BeforeSuite(func(done Done) {
 	ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
 	Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
 
+	// Create a mock MCG CSV
+	mcgCSV := &opv1a1.ClusterServiceVersion{}
+	mcgCSV.Name = mcgOperatorName
+	mcgCSV.Namespace = testPrimaryNamespace
+	mcgCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+	mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockMCGCSVDeploymentSpec()
+	Expect(k8sClient.Create(ctx, mcgCSV)).ShouldNot(HaveOccurred())
+
 	// Create the ManagedOCS resource
 	managedOCS := &v1.ManagedOCS{}
 	managedOCS.Name = managedOCSName
@@ -255,6 +263,32 @@ func getMockOCSCSVDeploymentSpec() []opv1a1.StrategyDeploymentSpec {
 						Containers: []corev1.Container{
 							{
 								Name: "ocs-metrics-exporter",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return deploymentSpec
+}
+
+func getMockMCGCSVDeploymentSpec() []opv1a1.StrategyDeploymentSpec {
+	deploymentSpec := []opv1a1.StrategyDeploymentSpec{
+		{
+			Name: "noobaa-operator",
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"noobaa-operator": "deployment"},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{"noobaa-operator": "deployment"},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "noobaa-operator",
 							},
 						},
 					},

@@ -76,6 +76,7 @@ const (
 	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
 	deployerCSVPrefix                      = "ocs-osd-deployer"
 	ocsOperatorName                        = "ocs-operator"
+	mcgOperatorName                        = "mcg-operator"
 	egressNetworkPolicyName                = "egress-rule"
 	ingressNetworkPolicyName               = "ingress-rule"
 	cephIngressNetworkPolicyName           = "ceph-ingress-rule"
@@ -207,7 +208,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		),
 	)
-	ocsCSVPredicates := builder.WithPredicates(
+	csvPredicates := builder.WithPredicates(
 		predicate.NewPredicateFuncs(
 			func(client client.Object) bool {
 				return strings.HasPrefix(client.GetName(), ocsOperatorName)
@@ -278,7 +279,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &opv1a1.ClusterServiceVersion{}},
 			enqueueManangedOCSRequest,
-			ocsCSVPredicates,
+			csvPredicates,
 		).
 
 		// Create the controller
@@ -446,7 +447,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileStorageCluster(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcileOCSCSV(); err != nil {
+		if err := r.reconcileCSV(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileAlertRelabelConfigSecret(); err != nil {
@@ -1305,28 +1306,33 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 	return false, nil
 }
 
-func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
+func (r *ManagedOCSReconciler) reconcileCSV() error {
+	r.Log.Info("Reconciling CSVs")
+
 	csvList := opv1a1.ClusterServiceVersionList{}
 	if err := r.list(&csvList); err != nil {
 		return fmt.Errorf("unable to list csv resources: %v", err)
 	}
 
-	csv := getCSVByPrefix(csvList, ocsOperatorName)
-	if csv == nil {
-		return fmt.Errorf("OCS CSV not found")
+	for index := range csvList.Items {
+		csv := &csvList.Items[index]
+		if strings.HasPrefix(csv.Name, ocsOperatorName) {
+			if err := r.updateOCSCSV(csv); err != nil {
+				return fmt.Errorf("Failed to update OCS CSV: %v", err)
+			}
+		} else if strings.HasPrefix(csv.Name, mcgOperatorName) {
+			if err := r.updateMCGCSV(csv); err != nil {
+				return fmt.Errorf("Failed to update MCG CSV: %v", err)
+			}
+		}
 	}
-	var isChanged bool
+	return nil
+}
+
+func (r *ManagedOCSReconciler) updateOCSCSV(csv *opv1a1.ClusterServiceVersion) error {
+	isChanged := false
 	deployments := csv.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
 	for i := range deployments {
-		deployment := &deployments[i]
-		// Disable noobaa operator by scaling down the replica of noobaa deploymnet
-		// in OCS CSV.
-		if deployment.Name == "noobaa-operator" &&
-			(deployment.Spec.Replicas == nil || *deployment.Spec.Replicas > 0) {
-			zero := int32(0)
-			deployment.Spec.Replicas = &zero
-			isChanged = true
-		}
 		containers := deployments[i].Spec.Template.Spec.Containers
 		for j := range containers {
 			switch container := &containers[j]; container.Name {
@@ -1355,7 +1361,29 @@ func (r *ManagedOCSReconciler) reconcileOCSCSV() error {
 	}
 	if isChanged {
 		if err := r.update(csv); err != nil {
-			return fmt.Errorf("Failed to update OCS CSV with resource requirements: %v", err)
+			return fmt.Errorf("Failed to update OCS CSV: %v", err)
+		}
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) updateMCGCSV(csv *opv1a1.ClusterServiceVersion) error {
+	isChanged := false
+	mcgDeployments := csv.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
+	for i := range mcgDeployments {
+		deployment := &mcgDeployments[i]
+		// Disable noobaa operator by scaling down the replica of noobaa deploymnet
+		// in MCG Operator CSV.
+		if deployment.Name == "noobaa-operator" &&
+			(deployment.Spec.Replicas == nil || *deployment.Spec.Replicas > 0) {
+			zero := int32(0)
+			deployment.Spec.Replicas = &zero
+			isChanged = true
+		}
+	}
+	if isChanged {
+		if err := r.update(csv); err != nil {
+			return fmt.Errorf("Failed to update MCG CSV: %v", err)
 		}
 	}
 	return nil
