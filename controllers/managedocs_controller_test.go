@@ -8,10 +8,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	openshiftv1 "github.com/openshift/api/network/v1"
-	ocsv1 "github.com/openshift/ocs-operator/pkg/apis/ocs/v1"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	utils "github.com/red-hat-storage/ocs-osd-deployer/testutils"
 	ctrlutils "github.com/red-hat-storage/ocs-osd-deployer/utils"
@@ -21,7 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("ManagedOCS controller", func() {
@@ -477,7 +478,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				)
 
 				// Ensure, over a period of time, that the resources are not created
-				resList := []runtime.Object{
+				resList := []client.Object{
 					scTemplate.DeepCopy(),
 					promTemplate.DeepCopy(),
 					amTemplate.DeepCopy(),
@@ -492,7 +493,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 				// Ensure, over a period of time, that the resources are not created
-				resList := []runtime.Object{
+				resList := []client.Object{
 					scTemplate.DeepCopy(),
 					promTemplate.DeepCopy(),
 					amTemplate.DeepCopy(),
@@ -511,7 +512,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 				// Ensure, over a period of time, that the resources are not created
-				resList := []runtime.Object{
+				resList := []client.Object{
 					scTemplate.DeepCopy(),
 					promTemplate.DeepCopy(),
 					amTemplate.DeepCopy(),
@@ -595,7 +596,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				// Remove the secret for future cases
 				Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 				// Delete created resources
-				resList := []runtime.Object{
+				resList := []client.Object{
 					scTemplate.DeepCopy(),
 					promTemplate.DeepCopy(),
 					amTemplate.DeepCopy(),
@@ -706,22 +707,27 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there is no rook-ceph-operator-config ConfigMap", func() {
 			It("should not create reconciled resources", func() {
-				resList := []runtime.Object{
+				resList := []client.Object{
 					scTemplate.DeepCopy(),
 					promTemplate.DeepCopy(),
 					amTemplate.DeepCopy(),
 				}
 
-				// Delete existing resources
+				// Delete the configMap which will throw an error that
+				// the rook-ceph-operator-config configMap not found
+				// This will block creation of resources that gets created
+				// after reconcile of rook-ceph-operator-config configMap
+				configMap := rookConfigMapTemplate.DeepCopy()
+				Expect(k8sClient.Delete(ctx, configMap)).Should(Succeed())
+
+				// Delete the resource as they already exist because reconcile
+				// was working fine before deleting rook-ceph-operator-config configMap
 				for _, object := range resList {
 					Expect(k8sClient.Delete(ctx, object)).Should(Succeed())
 				}
 
-				// Ensure there is no rook-ceph-operator-config ConfigMap present
-				configMap := rookConfigMapTemplate.DeepCopy()
-				Expect(k8sClient.Delete(ctx, configMap)).Should(Succeed())
-
-				// Ensure, over a period of time, that the resources are not created
+				// Resource shouldn't get created as the rook-ceph-operator-config configMap
+				// was deleted
 				utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
 
 				// Recreate the configMap for other tests.
