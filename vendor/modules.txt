@@ -187,7 +187,7 @@ github.com/onsi/gomega/types
 github.com/openshift/api/network/v1
 github.com/openshift/api/quota/v1
 github.com/openshift/api/security/v1
-# github.com/openshift/custom-resource-status v0.0.0-20190812200727-7961da9a2eb7
+# github.com/openshift/custom-resource-status v1.1.0
 github.com/openshift/custom-resource-status/conditions/v1
 # github.com/operator-framework/api v0.10.0 => github.com/operator-framework/api v0.1.1
 ## explicit
@@ -219,6 +219,9 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/red-hat-data-services/odf-operator v0.0.0-20220210164358-c9fa5821600f
+## explicit
+github.com/red-hat-data-services/odf-operator/api/v1alpha1
 # github.com/red-hat-storage/ocs-operator v0.0.1-master.0.20220204091141-8b4aa12ac5a9
 ## explicit
 github.com/red-hat-storage/ocs-operator/api/v1
