@@ -119,7 +119,6 @@ type ManagedOCSReconciler struct {
 	prometheus                         *promv1.Prometheus
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
-	addonParamSecret                   *corev1.Secret
 	pagerdutySecret                    *corev1.Secret
 	deadMansSnitchSecret               *corev1.Secret
 	smtpSecret                         *corev1.Secret
@@ -129,6 +128,7 @@ type ManagedOCSReconciler struct {
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
 	namespace                          string
 	reconcileStrategy                  v1.ReconcileStrategy
+	addonParams                        map[string]string
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -328,6 +328,7 @@ func (r *ManagedOCSReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Request) {
 	r.ctx = ctx
 	r.namespace = req.NamespacedName.Namespace
+	r.addonParams = make(map[string]string)
 
 	r.managedOCS = &v1.ManagedOCS{}
 	r.managedOCS.Name = req.NamespacedName.Name
@@ -360,10 +361,6 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.alertmanager = &promv1.Alertmanager{}
 	r.alertmanager.Name = alertmanagerName
 	r.alertmanager.Namespace = r.namespace
-
-	r.addonParamSecret = &corev1.Secret{}
-	r.addonParamSecret.Name = r.AddonParamSecretName
-	r.addonParamSecret.Namespace = r.namespace
 
 	r.pagerdutySecret = &corev1.Secret{}
 	r.pagerdutySecret.Name = r.PagerdutySecretName
@@ -436,8 +433,15 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.reconcileStrategy = v1.ReconcileStrategyNone
 		}
 
-		if err := r.get(r.addonParamSecret); err != nil {
-			return ctrl.Result{}, fmt.Errorf("Failed to get the addon param secret, Secret Name: %v", r.AddonParamSecretName)
+		// Read the add-on parameters secret and store it an addonParams map
+		addonParamSecret := &corev1.Secret{}
+		addonParamSecret.Name = r.AddonParamSecretName
+		addonParamSecret.Namespace = r.namespace
+		if err := r.get(addonParamSecret); err != nil {
+			return ctrl.Result{}, fmt.Errorf("Failed to get the addon parameters secret %v", r.AddonParamSecretName)
+		}
+		for key, value := range addonParamSecret.Data {
+			r.addonParams[key] = string(value)
 		}
 
 		// Reconcile the different resources
@@ -633,14 +637,12 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 }
 
 func (r *ManagedOCSReconciler) getDesiredConvergedStorageCluster() (*ocsv1.StorageCluster, error) {
-	addonParams := r.addonParamSecret.Data
+	sizeAsString := r.addonParams[storageClassSizeKey]
 
-	sizeAsString := string(addonParams[storageClassSizeKey])
-	enableMCGRaw, exists := addonParams[enableMCGKey]
 	// Setting hardcoded value here to force no MCG deployment
 	enableMCGAsString := "false"
-	if exists {
-		enableMCGAsString = string(enableMCGRaw)
+	if enableMCGRaw, exists := r.addonParams[enableMCGKey]; exists {
+		enableMCGAsString = enableMCGRaw
 	}
 	r.Log.Info("Requested add-on settings", storageClassSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
 	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
@@ -866,10 +868,11 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 		alertingAddressList := []string{}
 		i := 0
 		for {
-			alertingAddress, found := r.addonParamSecret.Data[notificationEmailKeyPrefix+fmt.Sprintf("-%v", i)]
+			alertingAddressKey := fmt.Sprintf("%s-%v", notificationEmailKeyPrefix, i)
+			alertingAddress, found := r.addonParams[alertingAddressKey]
 			i++
 			if found {
-				alertingAddressAsString := string(alertingAddress)
+				alertingAddressAsString := alertingAddress
 				if alertingAddressAsString != "" {
 					alertingAddressList = append(alertingAddressList, alertingAddressAsString)
 				}
