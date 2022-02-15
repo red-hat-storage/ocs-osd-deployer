@@ -50,6 +50,7 @@ import (
 	openshiftv1 "github.com/openshift/api/network/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
@@ -148,6 +149,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="coordination.k8s.io",namespace=system,resources=leases,verbs=create;get;list;watch;update
+// +kubebuilder:rbac:groups="odf.openshift.io",namespace=system,resources=storagesystems,verbs=list;watch;delete
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -402,6 +404,16 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 
 	if !r.managedOCS.DeletionTimestamp.IsZero() {
 		if r.verifyComponentsDoNotExist() {
+			// Deleting OCS CSV from the namespace
+			r.Log.Info("deleting OCS CSV")
+			if csv, err := r.getCSVByPrefix(ocsOperatorName); err == nil {
+				if err := r.delete(csv); err != nil {
+					return ctrl.Result{}, fmt.Errorf("unable to delete csv: %v", err)
+				}
+			} else {
+				return ctrl.Result{}, err
+			}
+
 			r.Log.Info("removing finalizer from the ManagedOCS resource")
 			r.managedOCS.SetFinalizers(utils.Remove(r.managedOCS.GetFinalizers(), ManagedOCSFinalizer))
 			if err := r.Client.Update(r.ctx, r.managedOCS); err != nil {
@@ -415,6 +427,19 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.Log.Info("deleting storagecluster")
 			if err := r.delete(r.storageCluster); err != nil {
 				return ctrl.Result{}, fmt.Errorf("unable to delete storagecluster: %v", err)
+			}
+
+			// Deleting all storage systems from the namespace
+			r.Log.Info("deleting storageSystems")
+			storageSystemList := odfv1a1.StorageSystemList{}
+			if err := r.list(&storageSystemList); err != nil {
+				return ctrl.Result{}, fmt.Errorf("unable to list storageSystem resource: %v", err)
+			}
+			for i := range storageSystemList.Items {
+				storageSystem := storageSystemList.Items[i]
+				if err := r.delete(&storageSystem); err != nil {
+					return ctrl.Result{}, fmt.Errorf("unable to delete storageSystem: %v", err)
+				}
 			}
 		}
 
@@ -1395,20 +1420,16 @@ func (r *ManagedOCSReconciler) updateMCGCSV(csv *opv1a1.ClusterServiceVersion) e
 func (r *ManagedOCSReconciler) removeOLMComponents() error {
 
 	r.Log.Info("deleting deployer csv")
-	csvList := opv1a1.ClusterServiceVersionList{}
-	if err := r.list(&csvList); err != nil {
-		return fmt.Errorf("unable to list csv resources: %v", err)
-	}
-
-	csv := getCSVByPrefix(csvList, deployerCSVPrefix)
-	if csv != nil {
+	if csv, err := r.getCSVByPrefix(deployerCSVPrefix); err == nil {
 		if err := r.delete(csv); err != nil {
 			return fmt.Errorf("Unable to delete csv: %v", err)
+		} else {
+			r.Log.Info("Deployer csv removed successfully")
+			return nil
 		}
+	} else {
+		return err
 	}
-
-	r.Log.Info("Deployer csv removed successfully")
-	return nil
 }
 
 func (r *ManagedOCSReconciler) get(obj client.Object) error {
@@ -1440,7 +1461,12 @@ func (r *ManagedOCSReconciler) own(resource metav1.Object) error {
 	return nil
 }
 
-func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1a1.ClusterServiceVersion {
+func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServiceVersion, error) {
+	csvList := opv1a1.ClusterServiceVersionList{}
+	if err := r.list(&csvList); err != nil {
+		return nil, fmt.Errorf("unable to list csv resources: %v", err)
+	}
+
 	var csv *opv1a1.ClusterServiceVersion = nil
 	for index := range csvList.Items {
 		candidate := &csvList.Items[index]
@@ -1449,7 +1475,7 @@ func getCSVByPrefix(csvList opv1a1.ClusterServiceVersionList, name string) *opv1
 			break
 		}
 	}
-	return csv
+	return csv, nil
 }
 
 func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {
