@@ -75,6 +75,7 @@ const (
 	storageProviderEndpointKey             = "storage-provider-endpoint"
 	enableMCGKey                           = "enable-mcg"
 	notificationEmailKeyPrefix             = "notification-email"
+	onboardingValidationKey                = "onboarding-validation-key"
 	deviceSetName                          = "default"
 	storageClassRbdName                    = "ocs-storagecluster-ceph-rbd"
 	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
@@ -94,6 +95,10 @@ const (
 	openshiftMonitoringNamespace           = "openshift-monitoring"
 	alertRelabelConfigSecretName           = "managed-ocs-alert-relabel-config-secret"
 	alertRelabelConfigSecretKey            = "alertrelabelconfig.yaml"
+	onboardingValidationKeySecretName      = "onboarding-ticket-key"
+	convergedDeploymentType                = "converged"
+	consumerDeploymentType                 = "consumer"
+	providerDeploymentType                 = "provider"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -133,6 +138,7 @@ type ManagedOCSReconciler struct {
 	namespace                          string
 	reconcileStrategy                  v1.ReconcileStrategy
 	addonParams                        map[string]string
+	onboardingValidationKeySecret      *corev1.Secret
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -334,6 +340,7 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.ctx = ctx
 	r.namespace = req.NamespacedName.Namespace
 	r.addonParams = make(map[string]string)
+	r.DeploymentType = strings.ToLower(r.DeploymentType)
 
 	r.managedOCS = &v1.ManagedOCS{}
 	r.managedOCS.Name = req.NamespacedName.Name
@@ -395,6 +402,9 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.alertRelabelConfigSecret.Name = alertRelabelConfigSecretName
 	r.alertRelabelConfigSecret.Namespace = r.namespace
 
+	r.onboardingValidationKeySecret = &corev1.Secret{}
+	r.onboardingValidationKeySecret.Name = onboardingValidationKeySecretName
+	r.onboardingValidationKeySecret.Namespace = r.namespace
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -509,9 +519,8 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileOCSInitialization(); err != nil {
 			return ctrl.Result{}, err
 		}
-
-		// fix for non-converged deployment will be provided in upcoming PR
-		if r.DeploymentType == "converged" {
+		// Fix for non-converged deployment type will be provided in upcoming PR
+		if r.DeploymentType == convergedDeploymentType {
 			if err := r.reconcileEgressNetworkPolicy(); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -521,6 +530,10 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
 				return ctrl.Result{}, err
 			}
+		}
+		// Reconciles only for provider deployment type
+		if err := r.reconcileOnboardinValidationSecret(); err != nil {
+			return ctrl.Result{}, err
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
@@ -646,15 +659,20 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 		// Handle only strict mode reconciliation
 		if r.reconcileStrategy == v1.ReconcileStrategyStrict {
 			var desired *ocsv1.StorageCluster = nil
-			switch strings.ToLower(r.DeploymentType) {
-			case "converged":
+			switch r.DeploymentType {
+			case convergedDeploymentType:
 				var err error
 				if desired, err = r.getDesiredConvergedStorageCluster(); err != nil {
 					return err
 				}
-			case "consumer":
+			case consumerDeploymentType:
 				var err error
 				if desired, err = r.getDesiredConsumerStorageCluster(); err != nil {
+					return err
+				}
+			case providerDeploymentType:
+				var err error
+				if desired, err = r.getDesiredProviderStorageCluster(); err != nil {
 					return err
 				}
 			default:
@@ -690,36 +708,61 @@ func (r *ManagedOCSReconciler) getDesiredConvergedStorageCluster() (*ocsv1.Stora
 
 	// Get the storage device set count of the current storage cluster
 	currDeviceSetCount := 0
-	for index := range r.storageCluster.Spec.StorageDeviceSets {
-		item := &r.storageCluster.Spec.StorageDeviceSets[index]
-		if item.Name == deviceSetName {
-			currDeviceSetCount = item.Count
-			break
-		}
+	if desiredStorageDeviceSet := findStorageDeviceSet(r.storageCluster.Spec.StorageDeviceSets, deviceSetName); desiredStorageDeviceSet != nil {
+		currDeviceSetCount = desiredStorageDeviceSet.Count
 	}
 
-	sc := templates.StorageClusterTemplate.DeepCopy()
-
+	// Get the desired storage device set from storage cluster template
+	sc := templates.ConvergedStorageClusterTemplate.DeepCopy()
 	var ds *ocsv1.StorageDeviceSet = nil
-	for index := range sc.Spec.StorageDeviceSets {
-		item := &sc.Spec.StorageDeviceSets[index]
-		if item.Name == deviceSetName {
-			ds = item
-			break
-		}
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("could not find default device set on stroage cluster")
+	if desiredStorageDeviceSet := findStorageDeviceSet(sc.Spec.StorageDeviceSets, deviceSetName); desiredStorageDeviceSet != nil {
+		ds = desiredStorageDeviceSet
 	}
 
 	// Prevent downscaling by comparing count from secret and count from storage cluster
-	r.Log.Info("Setting storage device set count", "Current", currDeviceSetCount, "New", desiredDeviceSetCount)
-	if currDeviceSetCount <= desiredDeviceSetCount {
-		ds.Count = desiredDeviceSetCount
-	} else {
-		r.Log.V(-1).Info("Requested storage device set count will result in downscaling, which is not supported. Skipping")
-		ds.Count = currDeviceSetCount
+	r.setDeviceSetCount(ds, desiredDeviceSetCount, currDeviceSetCount)
+
+	// Check and enable MCG in Storage Cluster spec
+	mcgEnable, err := strconv.ParseBool(enableMCGAsString)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid Enable MCG value: %v", enableMCGAsString)
 	}
+	if err := r.ensureMCGDeployment(sc, mcgEnable); err != nil {
+		return nil, err
+	}
+
+	return sc, nil
+}
+
+func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.StorageCluster, error) {
+	sizeAsString := r.addonParams[storageSizeKey]
+
+	// Setting hardcoded value here to force no MCG deployment
+	enableMCGAsString := "false"
+	if enableMCGRaw, exists := r.addonParams[enableMCGKey]; exists {
+		enableMCGAsString = enableMCGRaw
+	}
+	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
+	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
+	}
+
+	// Get the storage device set count of the current storage cluster
+	currDeviceSetCount := 0
+	if desiredStorageDeviceSet := findStorageDeviceSet(r.storageCluster.Spec.StorageDeviceSets, deviceSetName); desiredStorageDeviceSet != nil {
+		currDeviceSetCount = desiredStorageDeviceSet.Count
+	}
+
+	// Get the desired storage device set from storage cluster template
+	sc := templates.ProviderStorageClusterTemplate.DeepCopy()
+	var ds *ocsv1.StorageDeviceSet = nil
+	if desiredStorageDeviceSet := findStorageDeviceSet(sc.Spec.StorageDeviceSets, deviceSetName); desiredStorageDeviceSet != nil {
+		ds = desiredStorageDeviceSet
+	}
+
+	// Prevent downscaling by comparing count from secret and count from storage cluster
+	r.setDeviceSetCount(ds, desiredDeviceSetCount, currDeviceSetCount)
 
 	// Check and enable MCG in Storage Cluster spec
 	mcgEnable, err := strconv.ParseBool(enableMCGAsString)
@@ -770,6 +813,27 @@ func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.Storag
 	}
 
 	return sc, nil
+}
+
+func (r *ManagedOCSReconciler) reconcileOnboardinValidationSecret() error {
+	if r.DeploymentType != providerDeploymentType {
+		r.Log.Info("Non provider deployment, skipping reconcile for onboarding validation secret")
+		return nil
+	}
+	r.Log.Info("Reconciling onboardingValidationKeySecret")
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.onboardingValidationKeySecret, func() error {
+		if err := r.own(r.onboardingValidationKeySecret); err != nil {
+			return err
+		}
+		r.onboardingValidationKeySecret.Data = map[string][]byte{
+			"key": []byte(r.addonParams[onboardingValidationKey]),
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update onboardingValidationKeySecret: %v", err)
+	}
+	return nil
 }
 
 // AlertRelabelConfigSecret will have configuration for relabeling the alerts that are firing.
@@ -1533,6 +1597,16 @@ func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {
 	return r.UnrestrictedClient.Get(r.ctx, key, obj)
 }
 
+func findStorageDeviceSet(storageDeviceSets []ocsv1.StorageDeviceSet, deviceSetName string) *ocsv1.StorageDeviceSet {
+	for index := range storageDeviceSets {
+		item := &storageDeviceSets[index]
+		if item.Name == deviceSetName {
+			return item
+		}
+	}
+	return nil
+}
+
 func (r *ManagedOCSReconciler) ensureMCGDeployment(storageCluster *ocsv1.StorageCluster, mcgEnable bool) error {
 	// Check and enable MCG in Storage Cluster spec
 	if mcgEnable {
@@ -1542,4 +1616,14 @@ func (r *ManagedOCSReconciler) ensureMCGDeployment(storageCluster *ocsv1.Storage
 		r.Log.V(-1).Info("Trying to disable Multi Cloud Gateway, Invalid operation")
 	}
 	return nil
+}
+
+func (r *ManagedOCSReconciler) setDeviceSetCount(deviceSet *ocsv1.StorageDeviceSet, desiredDeviceSetCount int, currDeviceSetCount int) {
+	r.Log.Info("Setting storage device set count", "Current", currDeviceSetCount, "New", desiredDeviceSetCount)
+	if currDeviceSetCount <= desiredDeviceSetCount {
+		deviceSet.Count = desiredDeviceSetCount
+	} else {
+		r.Log.V(-1).Info("Requested storage device set count will result in downscaling, which is not supported. Skipping")
+		deviceSet.Count = currDeviceSetCount
+	}
 }
