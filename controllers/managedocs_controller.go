@@ -27,13 +27,14 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v2"
-	"k8s.io/apimachinery/pkg/api/equality"
 
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -69,7 +70,9 @@ const (
 	alertmanagerName                       = "managed-ocs-alertmanager"
 	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
 	dmsRuleName                            = "dms-monitor-rule"
-	storageClassSizeKey                    = "size"
+	storageSizeKey                         = "size"
+	onboardingTicketKey                    = "onboarding-ticket"
+	storageProviderEndpointKey             = "storage-provider-endpoint"
 	enableMCGKey                           = "enable-mcg"
 	notificationEmailKeyPrefix             = "notification-email"
 	deviceSetName                          = "default"
@@ -649,6 +652,11 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 				if desired, err = r.getDesiredConvergedStorageCluster(); err != nil {
 					return err
 				}
+			case "consumer":
+				var err error
+				if desired, err = r.getDesiredConsumerStorageCluster(); err != nil {
+					return err
+				}
 			default:
 				return fmt.Errorf("Invalid deployment type value: %v", r.DeploymentType)
 			}
@@ -666,14 +674,15 @@ func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
 }
 
 func (r *ManagedOCSReconciler) getDesiredConvergedStorageCluster() (*ocsv1.StorageCluster, error) {
-	sizeAsString := r.addonParams[storageClassSizeKey]
+	sizeAsString := r.addonParams[storageSizeKey]
 
 	// Setting hardcoded value here to force no MCG deployment
 	enableMCGAsString := "false"
 	if enableMCGRaw, exists := r.addonParams[enableMCGKey]; exists {
 		enableMCGAsString = enableMCGRaw
 	}
-	r.Log.Info("Requested add-on settings", storageClassSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
+
+	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
 	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
@@ -711,16 +720,53 @@ func (r *ManagedOCSReconciler) getDesiredConvergedStorageCluster() (*ocsv1.Stora
 		r.Log.V(-1).Info("Requested storage device set count will result in downscaling, which is not supported. Skipping")
 		ds.Count = currDeviceSetCount
 	}
+
 	// Check and enable MCG in Storage Cluster spec
 	mcgEnable, err := strconv.ParseBool(enableMCGAsString)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid Enable MCG value: %v", enableMCGAsString)
 	}
-	if mcgEnable {
-		r.Log.Info("Enabling Multi Cloud Gateway")
-		sc.Spec.MultiCloudGateway.ReconcileStrategy = "manage"
-	} else if sc.Spec.MultiCloudGateway.ReconcileStrategy == "manage" {
-		r.Log.V(-1).Info("Trying to disable Multi Cloud Gateway, Invalid operation")
+	if err := r.ensureMCGDeployment(sc, mcgEnable); err != nil {
+		return nil, err
+	}
+
+	return sc, nil
+}
+
+func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.StorageCluster, error) {
+
+	sizeAsString := r.addonParams[storageSizeKey]
+	onboardingTicket := r.addonParams[onboardingTicketKey]
+	storageProviderEndpoint := r.addonParams[storageProviderEndpointKey]
+
+	// Setting hardcoded value here to force no MCG deployment
+	enableMCGAsString := "false"
+	if enableMCGRaw, exists := r.addonParams[enableMCGKey]; exists {
+		enableMCGAsString = enableMCGRaw
+	}
+
+	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString,
+		onboardingTicketKey, onboardingTicket, storageProviderEndpointKey, storageProviderEndpoint)
+
+	requestedCapacity, err := resource.ParseQuantity(sizeAsString)
+	// Check if the requested capacity is valid
+	if err != nil || requestedCapacity.Sign() == -1 {
+		return nil, fmt.Errorf("Invalid storage cluster capacity value: %v", sizeAsString)
+	}
+
+	sc := templates.ConsumerStorageClusterTemplate.DeepCopy()
+	externalStorageSpec := &sc.Spec.ExternalStorage
+	externalStorageSpec.OnboardingTicket = onboardingTicket
+	externalStorageSpec.StorageProviderEndpoint = storageProviderEndpoint
+	externalStorageSpec.RequestedCapacity = &requestedCapacity
+
+	// Check and enable MCG in Storage Cluster spec
+	mcgEnable, err := strconv.ParseBool(enableMCGAsString)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid Enable MCG value: %v", enableMCGAsString)
+	}
+	if err := r.ensureMCGDeployment(sc, mcgEnable); err != nil {
+		return nil, err
 	}
 
 	return sc, nil
@@ -1485,4 +1531,15 @@ func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServi
 func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {
 	key := client.ObjectKeyFromObject(obj)
 	return r.UnrestrictedClient.Get(r.ctx, key, obj)
+}
+
+func (r *ManagedOCSReconciler) ensureMCGDeployment(storageCluster *ocsv1.StorageCluster, mcgEnable bool) error {
+	// Check and enable MCG in Storage Cluster spec
+	if mcgEnable {
+		r.Log.Info("Enabling Multi Cloud Gateway")
+		storageCluster.Spec.MultiCloudGateway.ReconcileStrategy = "manage"
+	} else if storageCluster.Spec.MultiCloudGateway.ReconcileStrategy == "manage" {
+		r.Log.V(-1).Info("Trying to disable Multi Cloud Gateway, Invalid operation")
+	}
+	return nil
 }
