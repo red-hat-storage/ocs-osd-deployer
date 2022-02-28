@@ -506,14 +506,18 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileOCSInitialization(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcileEgressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
+
+		// fix for non-converged deployment will be provided in upcoming PR
+		if r.DeploymentType == "converged" {
+			if err := r.reconcileEgressNetworkPolicy(); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.reconcileIngressNetworkPolicy(); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
