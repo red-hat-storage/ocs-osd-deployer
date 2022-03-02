@@ -49,6 +49,7 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var testReconciler *ManagedOCSReconciler
 
 const (
 	testPrimaryNamespace                       = "primary"
@@ -64,7 +65,6 @@ const (
 	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
 	testCustomerNotificationHTMLPath           = "../templates/customernotification.html"
-	testDeploymentType                         = "converged"
 )
 
 func TestAPIs(t *testing.T) {
@@ -117,7 +117,7 @@ var _ = BeforeSuite(func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		err = (&ManagedOCSReconciler{
+		testReconciler = &ManagedOCSReconciler{
 			Client:                       k8sManager.GetClient(),
 			UnrestrictedClient:           k8sManager.GetClient(),
 			Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
@@ -129,8 +129,9 @@ var _ = BeforeSuite(func() {
 			DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
 			SMTPSecretName:               testSMTPSecretName,
 			CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
-			DeploymentType:               testDeploymentType,
-		}).SetupWithManager(k8sManager)
+		}
+
+		err = (testReconciler).SetupWithManager(k8sManager)
 		Expect(err).ToNot(HaveOccurred())
 
 		go func() {
@@ -159,22 +160,6 @@ var _ = BeforeSuite(func() {
 		openshiftMonitoringNS.Name = testOpenshiftMonitoringNamespace
 		Expect(k8sClient.Create(ctx, openshiftMonitoringNS)).Should(Succeed())
 
-		// create a mock deplyer CSV
-		deployerCSV := &opv1a1.ClusterServiceVersion{}
-		deployerCSV.Name = testDeployerCSVName
-		deployerCSV.Namespace = testPrimaryNamespace
-		deployerCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
-		deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{}
-		Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
-
-		// create a mock OCS CSV
-		ocsCSV := &opv1a1.ClusterServiceVersion{}
-		ocsCSV.Name = ocsOperatorName
-		ocsCSV.Namespace = testPrimaryNamespace
-		ocsCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
-		ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
-		Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
-
 		// Create a mock MCG CSV
 		mcgCSV := &opv1a1.ClusterServiceVersion{}
 		mcgCSV.Name = mcgOperatorName
@@ -182,12 +167,6 @@ var _ = BeforeSuite(func() {
 		mcgCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
 		mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockMCGCSVDeploymentSpec()
 		Expect(k8sClient.Create(ctx, mcgCSV)).ShouldNot(HaveOccurred())
-
-		// Create the ManagedOCS resource
-		managedOCS := &v1.ManagedOCS{}
-		managedOCS.Name = managedOCSName
-		managedOCS.Namespace = testPrimaryNamespace
-		Expect(k8sClient.Create(ctx, managedOCS)).ShouldNot(HaveOccurred())
 
 		// Create the rook ceph operator config map
 		rookConfigMap := &corev1.ConfigMap{}
