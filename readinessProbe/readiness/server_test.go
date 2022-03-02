@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	utils "github.com/red-hat-storage/ocs-osd-deployer/testutils"

@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,7 +31,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -71,135 +70,138 @@ const (
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"Controller Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, "Controller Suite")
 }
 
-var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	By("bootstrapping test environment")
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "config", "crd", "bases"),
-			filepath.Join("..", "shim", "crds"),
-		},
-	}
-
-	var err error
-	cfg, err = testEnv.Start()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(cfg).ToNot(BeNil())
-
-	err = ocsv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = promv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = promv1a1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = v1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = opv1a1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = openshiftv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
-
-	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
-	})
-	Expect(err).ToNot(HaveOccurred())
-
-	err = (&ManagedOCSReconciler{
-		Client:                       k8sManager.GetClient(),
-		UnrestrictedClient:           k8sManager.GetClient(),
-		Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-		Scheme:                       scheme.Scheme,
-		AddonParamSecretName:         testAddonParamsSecretName,
-		AddonConfigMapName:           testAddonConfigMapName,
-		AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
-		PagerdutySecretName:          testPagerdutySecretName,
-		DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
-		SMTPSecretName:               testSMTPSecretName,
-		CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
-		DeploymentType:               testDeploymentType,
-	}).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
+var _ = BeforeSuite(func() {
+	done := make(chan interface{})
 	go func() {
-		err = k8sManager.Start(ctrl.SetupSignalHandler())
+
+		logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+		By("bootstrapping test environment")
+		testEnv = &envtest.Environment{
+			CRDDirectoryPaths: []string{
+				filepath.Join("..", "config", "crd", "bases"),
+				filepath.Join("..", "shim", "crds"),
+			},
+		}
+
+		var err error
+		cfg, err = testEnv.Start()
 		Expect(err).ToNot(HaveOccurred())
+		Expect(cfg).ToNot(BeNil())
+
+		err = ocsv1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = promv1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = promv1a1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = v1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = opv1a1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = openshiftv1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		// +kubebuilder:scaffold:scheme
+
+		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+			Scheme: scheme.Scheme,
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		err = (&ManagedOCSReconciler{
+			Client:                       k8sManager.GetClient(),
+			UnrestrictedClient:           k8sManager.GetClient(),
+			Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
+			Scheme:                       scheme.Scheme,
+			AddonParamSecretName:         testAddonParamsSecretName,
+			AddonConfigMapName:           testAddonConfigMapName,
+			AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
+			PagerdutySecretName:          testPagerdutySecretName,
+			DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
+			SMTPSecretName:               testSMTPSecretName,
+			CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
+			DeploymentType:               testDeploymentType,
+		}).SetupWithManager(k8sManager)
+		Expect(err).ToNot(HaveOccurred())
+
+		go func() {
+			err = k8sManager.Start(ctrl.SetupSignalHandler())
+			Expect(err).ToNot(HaveOccurred())
+		}()
+
+		// Client to be use by the test code, using a non cached client
+		k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(k8sClient).ToNot(BeNil())
+
+		ctx := context.Background()
+
+		// Create the primary namespace to be used by some of the tests
+		primaryNS := &corev1.Namespace{}
+		primaryNS.Name = testPrimaryNamespace
+		Expect(k8sClient.Create(ctx, primaryNS)).Should(Succeed())
+
+		// Create a secondary namespace to be used by some of the tests
+		secondaryNS := &corev1.Namespace{}
+		secondaryNS.Name = testSecondaryNamespace
+		Expect(k8sClient.Create(ctx, secondaryNS)).Should(Succeed())
+
+		openshiftMonitoringNS := &corev1.Namespace{}
+		openshiftMonitoringNS.Name = testOpenshiftMonitoringNamespace
+		Expect(k8sClient.Create(ctx, openshiftMonitoringNS)).Should(Succeed())
+
+		// create a mock deplyer CSV
+		deployerCSV := &opv1a1.ClusterServiceVersion{}
+		deployerCSV.Name = testDeployerCSVName
+		deployerCSV.Namespace = testPrimaryNamespace
+		deployerCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+		deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{}
+		Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
+
+		// create a mock OCS CSV
+		ocsCSV := &opv1a1.ClusterServiceVersion{}
+		ocsCSV.Name = ocsOperatorName
+		ocsCSV.Namespace = testPrimaryNamespace
+		ocsCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+		ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
+		Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
+
+		// Create a mock MCG CSV
+		mcgCSV := &opv1a1.ClusterServiceVersion{}
+		mcgCSV.Name = mcgOperatorName
+		mcgCSV.Namespace = testPrimaryNamespace
+		mcgCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+		mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockMCGCSVDeploymentSpec()
+		Expect(k8sClient.Create(ctx, mcgCSV)).ShouldNot(HaveOccurred())
+
+		// Create the ManagedOCS resource
+		managedOCS := &v1.ManagedOCS{}
+		managedOCS.Name = managedOCSName
+		managedOCS.Namespace = testPrimaryNamespace
+		Expect(k8sClient.Create(ctx, managedOCS)).ShouldNot(HaveOccurred())
+
+		// Create the rook ceph operator config map
+		rookConfigMap := &corev1.ConfigMap{}
+		rookConfigMap.Name = "rook-ceph-operator-config"
+		rookConfigMap.Namespace = testPrimaryNamespace
+		rookConfigMap.Data = map[string]string{
+			"test-key": "test-value",
+		}
+		Expect(k8sClient.Create(ctx, rookConfigMap)).ShouldNot(HaveOccurred())
+
+		close(done)
 	}()
-
-	// Client to be use by the test code, using a non cached client
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).ToNot(HaveOccurred())
-	Expect(k8sClient).ToNot(BeNil())
-
-	ctx := context.Background()
-
-	// Create the primary namespace to be used by some of the tests
-	primaryNS := &corev1.Namespace{}
-	primaryNS.Name = testPrimaryNamespace
-	Expect(k8sClient.Create(ctx, primaryNS)).Should(Succeed())
-
-	// Create a secondary namespace to be used by some of the tests
-	secondaryNS := &corev1.Namespace{}
-	secondaryNS.Name = testSecondaryNamespace
-	Expect(k8sClient.Create(ctx, secondaryNS)).Should(Succeed())
-
-	openshiftMonitoringNS := &corev1.Namespace{}
-	openshiftMonitoringNS.Name = testOpenshiftMonitoringNamespace
-	Expect(k8sClient.Create(ctx, openshiftMonitoringNS)).Should(Succeed())
-
-	// create a mock deplyer CSV
-	deployerCSV := &opv1a1.ClusterServiceVersion{}
-	deployerCSV.Name = testDeployerCSVName
-	deployerCSV.Namespace = testPrimaryNamespace
-	deployerCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
-	deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{}
-	Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
-
-	// create a mock OCS CSV
-	ocsCSV := &opv1a1.ClusterServiceVersion{}
-	ocsCSV.Name = ocsOperatorName
-	ocsCSV.Namespace = testPrimaryNamespace
-	ocsCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
-	ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
-	Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
-
-	// Create a mock MCG CSV
-	mcgCSV := &opv1a1.ClusterServiceVersion{}
-	mcgCSV.Name = mcgOperatorName
-	mcgCSV.Namespace = testPrimaryNamespace
-	mcgCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
-	mcgCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockMCGCSVDeploymentSpec()
-	Expect(k8sClient.Create(ctx, mcgCSV)).ShouldNot(HaveOccurred())
-
-	// Create the ManagedOCS resource
-	managedOCS := &v1.ManagedOCS{}
-	managedOCS.Name = managedOCSName
-	managedOCS.Namespace = testPrimaryNamespace
-	Expect(k8sClient.Create(ctx, managedOCS)).ShouldNot(HaveOccurred())
-
-	// Create the rook ceph operator config map
-	rookConfigMap := &corev1.ConfigMap{}
-	rookConfigMap.Name = "rook-ceph-operator-config"
-	rookConfigMap.Namespace = testPrimaryNamespace
-	rookConfigMap.Data = map[string]string{
-		"test-key": "test-value",
-	}
-	Expect(k8sClient.Create(ctx, rookConfigMap)).ShouldNot(HaveOccurred())
-
-	close(done)
-}, 60)
+	Eventually(done, 60).Should(BeClosed())
+})
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
