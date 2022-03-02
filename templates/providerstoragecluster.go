@@ -26,10 +26,8 @@ import (
 )
 
 // StorageClusterTemplate is the template that serves as the base for the storage clsuter deployed by the operator
-var gp2 = "gp2"
-var volumeModeBlock = corev1.PersistentVolumeBlock
 
-var StorageClusterTemplate = ocsv1.StorageCluster{
+var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 	Spec: ocsv1.StorageClusterSpec{
 		// The label selector is used to select only the worker nodes for
 		// both labeling and scheduling.
@@ -69,7 +67,7 @@ var StorageClusterTemplate = ocsv1.StorageCluster{
 					VolumeMode: &volumeModeBlock,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							"storage": resource.MustParse("1Ti"),
+							"storage": resource.MustParse("2Ti"),
 						},
 					},
 				},
@@ -82,5 +80,7 @@ var StorageClusterTemplate = ocsv1.StorageCluster{
 		MultiCloudGateway: &ocsv1.MultiCloudGatewaySpec{
 			ReconcileStrategy: "ignore",
 		},
+		HostNetwork:                 true,
+		AllowRemoteStorageConsumers: true,
 	},
 }
