@@ -288,6 +288,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	onboardingValidationKeySecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      onboardingValidationKeySecretName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -646,17 +652,47 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("there is a valid size in the add-on parameter secret", func() {
 				It("should create reconciled resources", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
-						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
-					}
+
 					// Create a valid add-on parameters secret
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
-					secret.Data["enable-mcg"] = []byte("false")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["enable-mcg"] = []byte("false")
+					case consumerDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["enable-mcg"] = []byte("false")
+						secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
+						secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["enable-mcg"] = []byte("false")
+						secret.Data["onboarding-validation-key"] = []byte("   test-validation-key   ")
+					}
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
+					if testReconciler.DeploymentType == providerDeploymentType {
+						By("Creating a onboarding validation key secret resource")
+						utils.WaitForResource(k8sClient, ctx, onboardingValidationKeySecretTemplate.DeepCopy(), timeout, interval)
+					}
+
 					By("Creating a storagecluster resource")
-					utils.WaitForResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
+					sc := scTemplate.DeepCopy()
+					utils.WaitForResource(k8sClient, ctx, sc, timeout, interval)
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						ds := sc.Spec.StorageDeviceSets[0]
+						Expect(ds.Count).Should(Equal(1))
+					case consumerDeploymentType:
+						Expect(sc.Spec.ExternalStorage.Enable).Should(BeTrue())
+						Expect(sc.Spec.ExternalStorage.OnboardingTicket).Should(Equal("onboarding-tickets"))
+						Expect(sc.Spec.ExternalStorage.StorageProviderEndpoint).Should(Equal("0.0.0.0:36179"))
+					case providerDeploymentType:
+						ds := sc.Spec.StorageDeviceSets[0]
+						Expect(ds.Count).Should(Equal(1))
+						Expect(sc.Spec.HostNetwork).Should(BeTrue())
+						Expect(sc.Spec.AllowRemoteStorageConsumers).Should(BeTrue())
+					}
 
 					By("Creating a prometheus resource")
 					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
@@ -664,26 +700,15 @@ var _ = Describe("ManagedOCS controller", func() {
 					By("Creating an alertmanager resource")
 					utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
 				})
-				It("should create reconciled resources", func() {
-					if testReconciler.DeploymentType == convergedDeploymentType {
+			})
+			When("onboarding validation data was passed to addon param secret", func() {
+				It("should trim whitespace and add header and footer to the data", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
 						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
 					}
-					// Create a valid add-on parameters secret
-					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
-					secret.Data["enable-mcg"] = []byte("false")
-					secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
-					secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
-					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-
-					By("Creating a storagecluster resource")
-					utils.WaitForResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
-
-					By("Creating a prometheus resource")
-					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
-
-					By("Creating an alertmanager resource")
-					utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
+					secret := onboardingValidationKeySecretTemplate.DeepCopy()
+					utils.WaitForResource(k8sClient, ctx, secret, timeout, interval)
+					Expect(secret.Data["key"]).Should(Equal([]byte("-----BEGIN PUBLIC KEY-----\ntest-validation-key\n-----END PUBLIC KEY-----")))
 				})
 			})
 			When("size is increased in the add-on parameters secret", func() {
@@ -1451,7 +1476,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the EgressNetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Get an updated EgressNetworkPolicy
@@ -1476,7 +1501,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the SNITCH_URL value in dms secret is modified", func() {
 				It("should update the EgressNetworkPolicy resource with the new snitch domain", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					dmsSecret := dmsSecretTemplate.DeepCopy()
@@ -1500,7 +1525,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the host value in smtp secret is modified", func() {
 				It("should update the EgressNetworkPolicy resource with the new host", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					smtpSecret := smtpSecretTemplate.DeepCopy()
@@ -1524,7 +1549,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the EgressNetworkPolicy resource is deleted", func() {
 				It("should create a new EgressNetworkPolicy in the namespace", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Delete the EgressNetworkPolicy resource
@@ -1536,6 +1561,9 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ingress NetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
+					if testReconciler.DeploymentType != convergedDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+					}
 					// Get an updated NetworkPolicy
 					ingress := ingressNetworkPolicyTemplate.DeepCopy()
 					ingressKey := utils.GetResourceKey(ingress)
@@ -1556,6 +1584,9 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ingress NetworkPolicy resource is deleted", func() {
 				It("should create a new ingress NetworkPolicy in the namespace", func() {
+					if testReconciler.DeploymentType != convergedDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+					}
 					// Delete the NetworkPolicy resource
 					Expect(k8sClient.Delete(ctx, ingressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
@@ -1565,6 +1596,9 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ceph ingress NetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
+					if testReconciler.DeploymentType != convergedDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+					}
 					// Get an updated NetworkPolicy
 					cephIngress := cephIngressNetworkPolicyTemplate.DeepCopy()
 					cephIngressKey := utils.GetResourceKey(cephIngress)
@@ -1585,6 +1619,9 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ceph ingress NetworkPolicy resource is deleted", func() {
 				It("should create a new ingress NetworkPolicy in the namespace", func() {
+					if testReconciler.DeploymentType != convergedDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+					}
 					// Delete the NetworkPolicy resource
 					Expect(k8sClient.Delete(ctx, cephIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
@@ -1752,6 +1789,5 @@ var _ = Describe("ManagedOCS controller", func() {
 
 	runTests(convergedDeploymentType)
 	runTests(consumerDeploymentType)
-	//runTests(providerDeploymentType)
-
+	runTests(providerDeploymentType)
 })
