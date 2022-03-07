@@ -486,6 +486,10 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
 		}
+		// Reconciles only for provider deployment type
+		if err := r.reconcileOnboardinValidationSecret(); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.reconcileStorageCluster(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -530,10 +534,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
 				return ctrl.Result{}, err
 			}
-		}
-		// Reconciles only for provider deployment type
-		if err := r.reconcileOnboardinValidationSecret(); err != nil {
-			return ctrl.Result{}, err
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
