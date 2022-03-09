@@ -46,9 +46,12 @@ var pagerdutyAlerts = []string{
 	"CephOSDFlapping",
 	"CephOSDDiskNotResponding",
 	"CephOSDDiskUnavailable",
+	"CephOSDCriticallyFull",
+	"CephOSDNearFull",
 	"CephDataRecoveryTakingTooLong",
 	"CephPGRepairTakingTooLong",
 	"CephMonQuorumAtRisk",
+	"CephMonQuorumLost",
 	"CephMonHighNumberOfLeaderChanges",
 }
 var smtpAlerts = []string{
@@ -59,12 +62,12 @@ var smtpAlerts = []string{
 	"PersistentVolumeUsageCritical",
 }
 
-// List of silenced alerts
+// List of ignored alerts
 //
-// OSD Full alerts are silenced as there is no scenario in our static deployment
-// configuration where an OSD is getting full without the cluster getting full.
-// CephOSDCriticallyFull
-// CephOSDNearFull
+// The following alerts are emitted, but are not acted upon by SRE workflows.
+// CephOSDSlowOps : the time taken for an OSD or MON op has exceeded threshold (default 30s)
+// CephPoolQuotaBytesNearExhaustion : Pool quota management is not used
+// CephPoolQuotaBytesCriticallyExhausted : Pool quota management is not used
 
 var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 	Spec: promv1a1.AlertmanagerConfigSpec{
