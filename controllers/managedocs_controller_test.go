@@ -753,11 +753,15 @@ var _ = Describe("ManagedOCS controller", func() {
 							return false
 						}
 
-						return configMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != "" &&
-							configMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != "" &&
-							configMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != "" &&
-							configMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != ""
-
+						if testReconciler.DeploymentType == providerDeploymentType {
+							return configMap.Data["ROOK_CSI_ENABLE_CEPHFS"] == "false" &&
+								configMap.Data["ROOK_CSI_ENABLE_RBD"] == "false"
+						} else {
+							return configMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != "" &&
+								configMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != "" &&
+								configMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != "" &&
+								configMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != ""
+						}
 					}, timeout, interval).Should(BeTrue())
 				})
 
