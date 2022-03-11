@@ -1204,104 +1204,100 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 		return fmt.Errorf("Failed to get Rook ConfigMap: %v", err)
 	}
 
-	if rookConfigMap.Data == nil {
-		rookConfigMap.Data = map[string]string{}
+	cloneRookConfigMap := rookConfigMap.DeepCopy()
+	if cloneRookConfigMap.Data == nil {
+		cloneRookConfigMap.Data = map[string]string{}
 	}
 
-	rbdProvisionerRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "csi-provisioner",
-			Resource: utils.GetResourceRequirements("csi-provisioner"),
-		},
-		{
-			Name:     "csi-resizer",
-			Resource: utils.GetResourceRequirements("csi-resizer"),
-		},
-		{
-			Name:     "csi-attacher",
-			Resource: utils.GetResourceRequirements("csi-attacher"),
-		},
-		{
-			Name:     "csi-snapshotter",
-			Resource: utils.GetResourceRequirements("csi-snapshotter"),
-		},
-		{
-			Name:     "csi-rbdplugin",
-			Resource: utils.GetResourceRequirements("csi-rbdplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+	if r.DeploymentType == providerDeploymentType {
+		cloneRookConfigMap.Data["ROOK_CSI_ENABLE_CEPHFS"] = "false"
+		cloneRookConfigMap.Data["ROOK_CSI_ENABLE_RBD"] = "false"
+	} else {
+		cloneRookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "csi-provisioner",
+				Resource: utils.GetResourceRequirements("csi-provisioner"),
+			},
+			{
+				Name:     "csi-resizer",
+				Resource: utils.GetResourceRequirements("csi-resizer"),
+			},
+			{
+				Name:     "csi-attacher",
+				Resource: utils.GetResourceRequirements("csi-attacher"),
+			},
+			{
+				Name:     "csi-snapshotter",
+				Resource: utils.GetResourceRequirements("csi-snapshotter"),
+			},
+			{
+				Name:     "csi-rbdplugin",
+				Resource: utils.GetResourceRequirements("csi-rbdplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
 
-	rbdPluginRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "driver-registar",
-			Resource: utils.GetResourceRequirements("driver-registrar"),
-		},
-		{
-			Name:     "csi-rbdplugin",
-			Resource: utils.GetResourceRequirements("csi-rbdplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+		cloneRookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "driver-registar",
+				Resource: utils.GetResourceRequirements("driver-registrar"),
+			},
+			{
+				Name:     "csi-rbdplugin",
+				Resource: utils.GetResourceRequirements("csi-rbdplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
 
-	fsProvisionerRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "csi-provisioner",
-			Resource: utils.GetResourceRequirements("csi-provisioner"),
-		},
-		{
-			Name:     "csi-resizer",
-			Resource: utils.GetResourceRequirements("csi-resizer"),
-		},
-		{
-			Name:     "csi-attacher",
-			Resource: utils.GetResourceRequirements("csi-attacher"),
-		},
-		{
-			Name:     "csi-cephfsplugin",
-			Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+		cloneRookConfigMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "csi-provisioner",
+				Resource: utils.GetResourceRequirements("csi-provisioner"),
+			},
+			{
+				Name:     "csi-resizer",
+				Resource: utils.GetResourceRequirements("csi-resizer"),
+			},
+			{
+				Name:     "csi-attacher",
+				Resource: utils.GetResourceRequirements("csi-attacher"),
+			},
+			{
+				Name:     "csi-cephfsplugin",
+				Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
 
-	fsPluginRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "driver-registrar",
-			Resource: utils.GetResourceRequirements("driver-registrar"),
-		},
-		{
-			Name:     "csi-cephfsplugin",
-			Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+		cloneRookConfigMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "driver-registrar",
+				Resource: utils.GetResourceRequirements("driver-registrar"),
+			},
+			{
+				Name:     "csi-cephfsplugin",
+				Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
+	}
 
-	if rookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != rbdProvisionerRequirements ||
-		rookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != rbdPluginRequirements ||
-		rookConfigMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != fsProvisionerRequirements ||
-		rookConfigMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != fsPluginRequirements {
-
-		rookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] = rbdProvisionerRequirements
-		rookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] = rbdPluginRequirements
-		rookConfigMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] = fsProvisionerRequirements
-		rookConfigMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] = fsPluginRequirements
-
-		if err := r.update(rookConfigMap); err != nil {
+	if !equality.Semantic.DeepEqual(rookConfigMap, cloneRookConfigMap) {
+		if err := r.update(cloneRookConfigMap); err != nil {
 			return fmt.Errorf("Failed to update Rook ConfigMap: %v", err)
 		}
-
 	}
 
 	return nil
