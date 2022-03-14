@@ -173,7 +173,7 @@ func readEnvVars() (map[string]string, error) {
 	}
 	for envVarName := range envVars {
 		val, found := os.LookupEnv(envVarName)
-		if !found {
+		if !found || val == "" {
 			return nil, fmt.Errorf("%s environment variable must be set", envVarName)
 		}
 		envVars[envVarName] = val
