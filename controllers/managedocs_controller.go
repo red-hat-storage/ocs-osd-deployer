@@ -825,8 +825,12 @@ func (r *ManagedOCSReconciler) reconcileOnboardinValidationSecret() error {
 		if err := r.own(r.onboardingValidationKeySecret); err != nil {
 			return err
 		}
+		onboardingValidationData := fmt.Sprintf(
+			"-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----",
+			strings.TrimSpace(r.addonParams[onboardingValidationKey]),
+		)
 		r.onboardingValidationKeySecret.Data = map[string][]byte{
-			"key": []byte(r.addonParams[onboardingValidationKey]),
+			"key": []byte(onboardingValidationData),
 		}
 		return nil
 	})
