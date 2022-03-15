@@ -886,7 +886,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 		}
 
 		desired := templates.PrometheusTemplate.DeepCopy()
-		r.prometheus.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
+		utils.AddLabel(r.prometheus, monLabelKey, monLabelValue)
 		r.prometheus.Spec = desired.Spec
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace
 		r.prometheus.Spec.AdditionalAlertRelabelConfigs = &corev1.SecretKeySelector{
