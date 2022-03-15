@@ -49,6 +49,7 @@ var pagerdutyAlerts = []string{
 	"CephDataRecoveryTakingTooLong",
 	"CephPGRepairTakingTooLong",
 	"CephMonQuorumAtRisk",
+	"CephMonQuorumLost",
 	"CephMonHighNumberOfLeaderChanges",
 }
 var smtpAlerts = []string{
