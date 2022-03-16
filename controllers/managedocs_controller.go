@@ -1094,44 +1094,91 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() err
 		if err := r.own(r.k8sMetricsServiceMonitorAuthSecret); err != nil {
 			return err
 		}
-
-		secret := &corev1.Secret{}
-		secret.Name = grafanaDatasourceSecretName
-		secret.Namespace = openshiftMonitoringNamespace
-		if err := r.unrestrictedGet(secret); err != nil {
-			return fmt.Errorf("Failed to get grafana-datasources secret from openshift-monitoring namespace: %v", err)
-		}
-
-		authInfoStructure := struct {
-			DataSources []struct {
-				BasicAuthPassword string `json:"basicAuthPassword"`
-				BasicAuthUser     string `json:"basicAuthUser"`
-			} `json:"datasources"`
-		}{}
-
-		if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
-			return fmt.Errorf("Could not unmarshal Grapana datasource data: %v", err)
-		}
-
-		r.k8sMetricsServiceMonitorAuthSecret.Data = nil
-		for key := range authInfoStructure.DataSources {
-			ds := &authInfoStructure.DataSources[key]
-			if ds.BasicAuthUser == "internal" && ds.BasicAuthPassword != "" {
-				r.k8sMetricsServiceMonitorAuthSecret.Data = map[string][]byte{
-					"Username": []byte(ds.BasicAuthUser),
-					"Password": []byte(ds.BasicAuthPassword),
-				}
+		var auth map[string][]byte = nil
+		var err error = nil
+		if auth, err = r.readGrafanaV1Secret(); err != nil {
+			if errors.IsNotFound(err) {
+				auth, err = r.readGrafanaV2Secret()
+			}
+			if err != nil {
+				return fmt.Errorf("Unable to find grafana-datasources secret: %v", err)
 			}
 		}
-		if r.k8sMetricsServiceMonitorAuthSecret.Data == nil {
-			return fmt.Errorf("Grapana datasource does not contain the needed credentials")
-		}
+		r.k8sMetricsServiceMonitorAuthSecret.Data = auth
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("Failed to update k8sMetricsServiceMonitorAuthSecret: %v", err)
 	}
 	return nil
+}
+
+func (r *ManagedOCSReconciler) readGrafanaV1Secret() (map[string][]byte, error) {
+	secret := &corev1.Secret{}
+	secret.Name = grafanaDatasourceSecretName
+	secret.Namespace = openshiftMonitoringNamespace
+	if err := r.unrestrictedGet(secret); err != nil {
+		return nil, err
+	}
+	authInfoStructure := struct {
+		DataSources []struct {
+			BasicAuthPassword string `json:"basicAuthPassword"`
+			BasicAuthUser     string `json:"basicAuthUser"`
+		} `json:"datasources"`
+	}{}
+	if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
+		return nil, err
+	}
+	var authDetails map[string][]byte = nil
+	for key := range authInfoStructure.DataSources {
+		ds := &authInfoStructure.DataSources[key]
+		if ds.BasicAuthUser == "internal" && ds.BasicAuthPassword != "" {
+			authDetails = map[string][]byte{
+				"Username": []byte(ds.BasicAuthUser),
+				"Password": []byte(ds.BasicAuthPassword),
+			}
+			break
+		}
+	}
+	if authDetails == nil {
+		return nil, fmt.Errorf("grafana-datasources does not contain required credentials")
+	}
+	return authDetails, nil
+}
+
+func (r *ManagedOCSReconciler) readGrafanaV2Secret() (map[string][]byte, error) {
+	secret := &corev1.Secret{}
+	secret.Name = "grafana-datasources-v2"
+	secret.Namespace = openshiftMonitoringNamespace
+	if err := r.unrestrictedGet(secret); err != nil {
+		return nil, err
+	}
+	authInfoStructure := struct {
+		DataSources []struct {
+			SecureJsonData struct {
+				BasicAuthPassword string `json:"basicAuthPassword"`
+			} `json:"secureJsonData"`
+			BasicAuthUser string `json:"basicAuthUser"`
+		} `json:"datasources"`
+	}{}
+	if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
+		return nil, err
+	}
+	var authDetails map[string][]byte = nil
+	for key := range authInfoStructure.DataSources {
+		ds := &authInfoStructure.DataSources[key]
+		if ds.BasicAuthUser == "internal" && ds.SecureJsonData.BasicAuthPassword != "" {
+			authDetails = map[string][]byte{
+				"Username": []byte(ds.BasicAuthUser),
+				"Password": []byte(ds.SecureJsonData.BasicAuthPassword),
+			}
+			break
+		}
+	}
+	if authDetails == nil {
+		return nil, fmt.Errorf("grafana-datasources-v2 does not contain required credentials")
+	}
+	return authDetails, nil
 }
 
 func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitor() error {
