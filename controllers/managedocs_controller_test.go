@@ -186,6 +186,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	providerApiServerIngressNetworkPolicyTemplate := netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      providerApiServerNetworkPolicyName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 	pvc1StorageClassName := storageClassRbdName
 	pvc1Template := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1530,9 +1536,6 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ingress NetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
-						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-					}
 					// Get an updated NetworkPolicy
 					ingress := ingressNetworkPolicyTemplate.DeepCopy()
 					ingressKey := utils.GetResourceKey(ingress)
@@ -1553,9 +1556,6 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ingress NetworkPolicy resource is deleted", func() {
 				It("should create a new ingress NetworkPolicy in the namespace", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
-						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-					}
 					// Delete the NetworkPolicy resource
 					Expect(k8sClient.Delete(ctx, ingressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
@@ -1565,9 +1565,6 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ceph ingress NetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
-						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-					}
 					// Get an updated NetworkPolicy
 					cephIngress := cephIngressNetworkPolicyTemplate.DeepCopy()
 					cephIngressKey := utils.GetResourceKey(cephIngress)
@@ -1588,14 +1585,36 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ceph ingress NetworkPolicy resource is deleted", func() {
 				It("should create a new ingress NetworkPolicy in the namespace", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
-						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-					}
 					// Delete the NetworkPolicy resource
 					Expect(k8sClient.Delete(ctx, cephIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
 					// Wait for the NetworkPolicy to be recreated
 					utils.WaitForResource(k8sClient, ctx, cephIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+				})
+			})
+			When("the provider api server ingress NetworkPolicy resource is modified", func() {
+				It("should create a new ingress NetworkPolicy in the namespace", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+					}
+
+					// Delete the NetworkPolicy resource
+					Expect(k8sClient.Delete(ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+					// Wait for the NetworkPolicy to be recreated
+					utils.WaitForResource(k8sClient, ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+				})
+			})
+			When("the provider api server ingress  NetworkPolicy resource is deleted", func() {
+				It("should create a new ingress NetworkPolicy in the namespace", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+					}
+					// Delete the NetworkPolicy resource
+					Expect(k8sClient.Delete(ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+					// Wait for the NetworkPolicy to be recreated
+					utils.WaitForResource(k8sClient, ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 				})
 			})
 			When("the addon config map does not exist while all other uninstall conditions are met", func() {
@@ -1733,5 +1752,6 @@ var _ = Describe("ManagedOCS controller", func() {
 
 	runTests(convergedDeploymentType)
 	runTests(consumerDeploymentType)
+	runTests(providerDeploymentType)
 
 })

@@ -85,6 +85,7 @@ const (
 	egressNetworkPolicyName                = "egress-rule"
 	ingressNetworkPolicyName               = "ingress-rule"
 	cephIngressNetworkPolicyName           = "ceph-ingress-rule"
+	providerApiServerNetworkPolicyName     = "provider-api-server-rule"
 	monLabelKey                            = "app"
 	monLabelValue                          = "managed-ocs"
 	rookConfigMapName                      = "rook-ceph-operator-config"
@@ -125,6 +126,7 @@ type ManagedOCSReconciler struct {
 	egressNetworkPolicy                *openshiftv1.EgressNetworkPolicy
 	ingressNetworkPolicy               *netv1.NetworkPolicy
 	cephIngressNetworkPolicy           *netv1.NetworkPolicy
+	providerAPIServerNetworkPolicy     *netv1.NetworkPolicy
 	prometheus                         *promv1.Prometheus
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
@@ -362,6 +364,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.cephIngressNetworkPolicy.Name = cephIngressNetworkPolicyName
 	r.cephIngressNetworkPolicy.Namespace = r.namespace
 
+	r.providerAPIServerNetworkPolicy = &netv1.NetworkPolicy{}
+	r.providerAPIServerNetworkPolicy.Name = providerApiServerNetworkPolicyName
+	r.providerAPIServerNetworkPolicy.Namespace = r.namespace
+
 	r.prometheus = &promv1.Prometheus{}
 	r.prometheus.Name = prometheusName
 	r.prometheus.Namespace = r.namespace
@@ -487,7 +493,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		// Reconciles only for provider deployment type
-		if err := r.reconcileOnboardinValidationSecret(); err != nil {
+		if err := r.reconcileOnboardingValidationSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileStorageCluster(); err != nil {
@@ -523,17 +529,17 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileOCSInitialization(); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Fix for non-converged deployment type will be provided in upcoming PR
-		if r.DeploymentType == convergedDeploymentType {
-			if err := r.reconcileEgressNetworkPolicy(); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.reconcileIngressNetworkPolicy(); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
-				return ctrl.Result{}, err
-			}
+		if err := r.reconcileEgressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
@@ -815,7 +821,7 @@ func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.Storag
 	return sc, nil
 }
 
-func (r *ManagedOCSReconciler) reconcileOnboardinValidationSecret() error {
+func (r *ManagedOCSReconciler) reconcileOnboardingValidationSecret() error {
 	if r.DeploymentType != providerDeploymentType {
 		r.Log.Info("Non provider deployment, skipping reconcile for onboarding validation secret")
 		return nil
@@ -1355,6 +1361,11 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
+	// Fix for non-converged deployment type will be provided in upcoming PR
+	if r.DeploymentType != convergedDeploymentType {
+		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
+		return nil
+	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
 		if err := r.own(r.egressNetworkPolicy); err != nil {
 			return err
@@ -1435,6 +1446,25 @@ func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
 	})
 	if err != nil {
 		return fmt.Errorf("Failed to update ceph ingress NetworkPolicy: %v", err)
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileProviderAPIServerNetworkPolicy() error {
+	if r.DeploymentType != providerDeploymentType {
+		r.Log.Info("Non provider deployment, skipping reconcile for api server ingress policy")
+		return nil
+	}
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.providerAPIServerNetworkPolicy, func() error {
+		if err := r.own(r.providerAPIServerNetworkPolicy); err != nil {
+			return err
+		}
+		desired := templates.ProviderApiServerNetworkPolicyTemplate.DeepCopy()
+		r.providerAPIServerNetworkPolicy.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update provider api server NetworkPolicy: %v", err)
 	}
 	return nil
 }
