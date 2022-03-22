@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,7 +33,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -61,53 +60,54 @@ var testEnv *envtest.Environment
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"Readiness Probe Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, "Readiness Probe Suite")
 }
 
-var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+var _ = BeforeSuite(func() {
+	done := make(chan interface{})
+	go func() {
+		logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "config", "crd", "bases"),
-		},
-	}
+		testEnv = &envtest.Environment{
+			CRDDirectoryPaths: []string{
+				filepath.Join("..", "..", "config", "crd", "bases"),
+			},
+		}
 
-	var err error
-	cfg, err = testEnv.Start()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(cfg).ToNot(BeNil())
+		var err error
+		cfg, err = testEnv.Start()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(cfg).ToNot(BeNil())
 
-	// Setup client options
-	var options client.Options
+		// Setup client options
+		var options client.Options
 
-	// The readiness must have these schemes to deserialize the k8s objects
-	options.Scheme = runtime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(options.Scheme))
-	utilruntime.Must(ocsv1.AddToScheme(options.Scheme))
-	utilruntime.Must(v1.AddToScheme(options.Scheme))
+		// The readiness must have these schemes to deserialize the k8s objects
+		options.Scheme = runtime.NewScheme()
+		utilruntime.Must(clientgoscheme.AddToScheme(options.Scheme))
+		utilruntime.Must(ocsv1.AddToScheme(options.Scheme))
+		utilruntime.Must(v1.AddToScheme(options.Scheme))
 
-	// Client to be use by the test code, using a non cached client
-	k8sClient, err = client.New(cfg, options)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(k8sClient).ToNot(BeNil())
+		// Client to be use by the test code, using a non cached client
+		k8sClient, err = client.New(cfg, options)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(k8sClient).ToNot(BeNil())
 
-	go RunServer(k8sClient, types.NamespacedName{Name: ManagedOCSName, Namespace: TestNamespace}, ctrl.Log.WithName("readiness"))
+		go RunServer(k8sClient, types.NamespacedName{Name: ManagedOCSName, Namespace: TestNamespace}, ctrl.Log.WithName("readiness"))
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	managedOCS := &v1.ManagedOCS{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ManagedOCSName,
-			Namespace: TestNamespace,
-		},
-	}
-	Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
-
-	close(done)
-}, 60)
+		managedOCS := &v1.ManagedOCS{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ManagedOCSName,
+				Namespace: TestNamespace,
+			},
+		}
+		Expect(k8sClient.Create(ctx, managedOCS)).Should(Succeed())
+		close(done)
+	}()
+	Eventually(done, 60).Should(BeClosed())
+})
 
 var _ = AfterSuite(func() {
 	ctx := context.Background()

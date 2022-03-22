@@ -486,6 +486,10 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
 		}
+		// Reconciles only for provider deployment type
+		if err := r.reconcileOnboardinValidationSecret(); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.reconcileStorageCluster(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -530,10 +534,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
 				return ctrl.Result{}, err
 			}
-		}
-		// Reconciles only for provider deployment type
-		if err := r.reconcileOnboardinValidationSecret(); err != nil {
-			return ctrl.Result{}, err
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
@@ -825,8 +825,12 @@ func (r *ManagedOCSReconciler) reconcileOnboardinValidationSecret() error {
 		if err := r.own(r.onboardingValidationKeySecret); err != nil {
 			return err
 		}
+		onboardingValidationData := fmt.Sprintf(
+			"-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----",
+			strings.TrimSpace(r.addonParams[onboardingValidationKey]),
+		)
 		r.onboardingValidationKeySecret.Data = map[string][]byte{
-			"key": []byte(r.addonParams[onboardingValidationKey]),
+			"key": []byte(onboardingValidationData),
 		}
 		return nil
 	})
@@ -882,7 +886,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 		}
 
 		desired := templates.PrometheusTemplate.DeepCopy()
-		r.prometheus.ObjectMeta.Labels = map[string]string{monLabelKey: monLabelValue}
+		utils.AddLabel(r.prometheus, monLabelKey, monLabelValue)
 		r.prometheus.Spec = desired.Spec
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace
 		r.prometheus.Spec.AdditionalAlertRelabelConfigs = &corev1.SecretKeySelector{
@@ -1090,44 +1094,91 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() err
 		if err := r.own(r.k8sMetricsServiceMonitorAuthSecret); err != nil {
 			return err
 		}
-
-		secret := &corev1.Secret{}
-		secret.Name = grafanaDatasourceSecretName
-		secret.Namespace = openshiftMonitoringNamespace
-		if err := r.unrestrictedGet(secret); err != nil {
-			return fmt.Errorf("Failed to get grafana-datasources secret from openshift-monitoring namespace: %v", err)
-		}
-
-		authInfoStructure := struct {
-			DataSources []struct {
-				BasicAuthPassword string `json:"basicAuthPassword"`
-				BasicAuthUser     string `json:"basicAuthUser"`
-			} `json:"datasources"`
-		}{}
-
-		if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
-			return fmt.Errorf("Could not unmarshal Grapana datasource data: %v", err)
-		}
-
-		r.k8sMetricsServiceMonitorAuthSecret.Data = nil
-		for key := range authInfoStructure.DataSources {
-			ds := &authInfoStructure.DataSources[key]
-			if ds.BasicAuthUser == "internal" && ds.BasicAuthPassword != "" {
-				r.k8sMetricsServiceMonitorAuthSecret.Data = map[string][]byte{
-					"Username": []byte(ds.BasicAuthUser),
-					"Password": []byte(ds.BasicAuthPassword),
-				}
+		var auth map[string][]byte = nil
+		var err error = nil
+		if auth, err = r.readGrafanaV1Secret(); err != nil {
+			if errors.IsNotFound(err) {
+				auth, err = r.readGrafanaV2Secret()
+			}
+			if err != nil {
+				return fmt.Errorf("Unable to find grafana-datasources secret: %v", err)
 			}
 		}
-		if r.k8sMetricsServiceMonitorAuthSecret.Data == nil {
-			return fmt.Errorf("Grapana datasource does not contain the needed credentials")
-		}
+		r.k8sMetricsServiceMonitorAuthSecret.Data = auth
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("Failed to update k8sMetricsServiceMonitorAuthSecret: %v", err)
 	}
 	return nil
+}
+
+func (r *ManagedOCSReconciler) readGrafanaV1Secret() (map[string][]byte, error) {
+	secret := &corev1.Secret{}
+	secret.Name = grafanaDatasourceSecretName
+	secret.Namespace = openshiftMonitoringNamespace
+	if err := r.unrestrictedGet(secret); err != nil {
+		return nil, err
+	}
+	authInfoStructure := struct {
+		DataSources []struct {
+			BasicAuthPassword string `json:"basicAuthPassword"`
+			BasicAuthUser     string `json:"basicAuthUser"`
+		} `json:"datasources"`
+	}{}
+	if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
+		return nil, err
+	}
+	var authDetails map[string][]byte = nil
+	for key := range authInfoStructure.DataSources {
+		ds := &authInfoStructure.DataSources[key]
+		if ds.BasicAuthUser == "internal" && ds.BasicAuthPassword != "" {
+			authDetails = map[string][]byte{
+				"Username": []byte(ds.BasicAuthUser),
+				"Password": []byte(ds.BasicAuthPassword),
+			}
+			break
+		}
+	}
+	if authDetails == nil {
+		return nil, fmt.Errorf("grafana-datasources does not contain required credentials")
+	}
+	return authDetails, nil
+}
+
+func (r *ManagedOCSReconciler) readGrafanaV2Secret() (map[string][]byte, error) {
+	secret := &corev1.Secret{}
+	secret.Name = "grafana-datasources-v2"
+	secret.Namespace = openshiftMonitoringNamespace
+	if err := r.unrestrictedGet(secret); err != nil {
+		return nil, err
+	}
+	authInfoStructure := struct {
+		DataSources []struct {
+			SecureJsonData struct {
+				BasicAuthPassword string `json:"basicAuthPassword"`
+			} `json:"secureJsonData"`
+			BasicAuthUser string `json:"basicAuthUser"`
+		} `json:"datasources"`
+	}{}
+	if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
+		return nil, err
+	}
+	var authDetails map[string][]byte = nil
+	for key := range authInfoStructure.DataSources {
+		ds := &authInfoStructure.DataSources[key]
+		if ds.BasicAuthUser == "internal" && ds.SecureJsonData.BasicAuthPassword != "" {
+			authDetails = map[string][]byte{
+				"Username": []byte(ds.BasicAuthUser),
+				"Password": []byte(ds.SecureJsonData.BasicAuthPassword),
+			}
+			break
+		}
+	}
+	if authDetails == nil {
+		return nil, fmt.Errorf("grafana-datasources-v2 does not contain required credentials")
+	}
+	return authDetails, nil
 }
 
 func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitor() error {
@@ -1204,104 +1255,100 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 		return fmt.Errorf("Failed to get Rook ConfigMap: %v", err)
 	}
 
-	if rookConfigMap.Data == nil {
-		rookConfigMap.Data = map[string]string{}
+	cloneRookConfigMap := rookConfigMap.DeepCopy()
+	if cloneRookConfigMap.Data == nil {
+		cloneRookConfigMap.Data = map[string]string{}
 	}
 
-	rbdProvisionerRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "csi-provisioner",
-			Resource: utils.GetResourceRequirements("csi-provisioner"),
-		},
-		{
-			Name:     "csi-resizer",
-			Resource: utils.GetResourceRequirements("csi-resizer"),
-		},
-		{
-			Name:     "csi-attacher",
-			Resource: utils.GetResourceRequirements("csi-attacher"),
-		},
-		{
-			Name:     "csi-snapshotter",
-			Resource: utils.GetResourceRequirements("csi-snapshotter"),
-		},
-		{
-			Name:     "csi-rbdplugin",
-			Resource: utils.GetResourceRequirements("csi-rbdplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+	if r.DeploymentType == providerDeploymentType {
+		cloneRookConfigMap.Data["ROOK_CSI_ENABLE_CEPHFS"] = "false"
+		cloneRookConfigMap.Data["ROOK_CSI_ENABLE_RBD"] = "false"
+	} else {
+		cloneRookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "csi-provisioner",
+				Resource: utils.GetResourceRequirements("csi-provisioner"),
+			},
+			{
+				Name:     "csi-resizer",
+				Resource: utils.GetResourceRequirements("csi-resizer"),
+			},
+			{
+				Name:     "csi-attacher",
+				Resource: utils.GetResourceRequirements("csi-attacher"),
+			},
+			{
+				Name:     "csi-snapshotter",
+				Resource: utils.GetResourceRequirements("csi-snapshotter"),
+			},
+			{
+				Name:     "csi-rbdplugin",
+				Resource: utils.GetResourceRequirements("csi-rbdplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
 
-	rbdPluginRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "driver-registar",
-			Resource: utils.GetResourceRequirements("driver-registrar"),
-		},
-		{
-			Name:     "csi-rbdplugin",
-			Resource: utils.GetResourceRequirements("csi-rbdplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+		cloneRookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "driver-registar",
+				Resource: utils.GetResourceRequirements("driver-registrar"),
+			},
+			{
+				Name:     "csi-rbdplugin",
+				Resource: utils.GetResourceRequirements("csi-rbdplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
 
-	fsProvisionerRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "csi-provisioner",
-			Resource: utils.GetResourceRequirements("csi-provisioner"),
-		},
-		{
-			Name:     "csi-resizer",
-			Resource: utils.GetResourceRequirements("csi-resizer"),
-		},
-		{
-			Name:     "csi-attacher",
-			Resource: utils.GetResourceRequirements("csi-attacher"),
-		},
-		{
-			Name:     "csi-cephfsplugin",
-			Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+		cloneRookConfigMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "csi-provisioner",
+				Resource: utils.GetResourceRequirements("csi-provisioner"),
+			},
+			{
+				Name:     "csi-resizer",
+				Resource: utils.GetResourceRequirements("csi-resizer"),
+			},
+			{
+				Name:     "csi-attacher",
+				Resource: utils.GetResourceRequirements("csi-attacher"),
+			},
+			{
+				Name:     "csi-cephfsplugin",
+				Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
 
-	fsPluginRequirements := utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-		{
-			Name:     "driver-registrar",
-			Resource: utils.GetResourceRequirements("driver-registrar"),
-		},
-		{
-			Name:     "csi-cephfsplugin",
-			Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
-		},
-		{
-			Name:     "liveness-prometheus",
-			Resource: utils.GetResourceRequirements("liveness-prometheus"),
-		},
-	})
+		cloneRookConfigMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
+			{
+				Name:     "driver-registrar",
+				Resource: utils.GetResourceRequirements("driver-registrar"),
+			},
+			{
+				Name:     "csi-cephfsplugin",
+				Resource: utils.GetResourceRequirements("csi-cephfsplugin"),
+			},
+			{
+				Name:     "liveness-prometheus",
+				Resource: utils.GetResourceRequirements("liveness-prometheus"),
+			},
+		})
+	}
 
-	if rookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] != rbdProvisionerRequirements ||
-		rookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] != rbdPluginRequirements ||
-		rookConfigMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] != fsProvisionerRequirements ||
-		rookConfigMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] != fsPluginRequirements {
-
-		rookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] = rbdProvisionerRequirements
-		rookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] = rbdPluginRequirements
-		rookConfigMap.Data["CSI_CEPHFS_PROVISIONER_RESOURCE"] = fsProvisionerRequirements
-		rookConfigMap.Data["CSI_CEPHFS_PLUGIN_RESOURCE"] = fsPluginRequirements
-
-		if err := r.update(rookConfigMap); err != nil {
+	if !equality.Semantic.DeepEqual(rookConfigMap, cloneRookConfigMap) {
+		if err := r.update(cloneRookConfigMap); err != nil {
 			return fmt.Errorf("Failed to update Rook ConfigMap: %v", err)
 		}
-
 	}
 
 	return nil
