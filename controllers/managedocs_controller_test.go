@@ -1752,6 +1752,6 @@ var _ = Describe("ManagedOCS controller", func() {
 
 	runTests(convergedDeploymentType)
 	runTests(consumerDeploymentType)
-	runTests(providerDeploymentType)
+	//runTests(providerDeploymentType)
 
 })
