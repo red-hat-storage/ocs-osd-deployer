@@ -23,6 +23,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	openshiftv1 "github.com/openshift/api/network/v1"
+	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
+	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,13 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	openshiftv1 "github.com/openshift/api/network/v1"
-	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
-	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
-	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
-	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
