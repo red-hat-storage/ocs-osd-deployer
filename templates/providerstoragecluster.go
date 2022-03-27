@@ -67,7 +67,7 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 					VolumeMode: &volumeModeBlock,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							"storage": resource.MustParse("2Ti"),
+							"storage": resource.MustParse("4Ti"),
 						},
 					},
 				},
