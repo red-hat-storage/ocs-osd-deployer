@@ -50,7 +50,6 @@ var pagerdutyAlerts = []string{
 	"CephPGRepairTakingTooLong",
 	"CephMonQuorumAtRisk",
 	"CephMonQuorumLost",
-	"CephMonHighNumberOfLeaderChanges",
 }
 var smtpAlerts = []string{
 	"CephClusterNearFull",
@@ -66,6 +65,9 @@ var smtpAlerts = []string{
 // configuration where an OSD is getting full without the cluster getting full.
 // CephOSDCriticallyFull
 // CephOSDNearFull
+//
+// This indicator has no immediate SRE action item associated with it.
+// "CephMonHighNumberOfLeaderChanges"
 
 var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 	Spec: promv1a1.AlertmanagerConfigSpec{
