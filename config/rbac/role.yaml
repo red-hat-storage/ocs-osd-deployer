@@ -16,6 +16,16 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - storage.k8s.io
   resources:
   - storageclass
