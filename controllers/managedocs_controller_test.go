@@ -571,7 +571,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				It("should not create storagecluster", func() {
 					Skip("Skipping this test till Nooba MCG is integrated in deployer")
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 					// Ensure, over a period of time, that the resource is not created
 					utils.EnsureNoResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
@@ -581,7 +581,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				It("should not create storagecluster", func() {
 					// Create a invalid enable-mcg parameter value
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					secret.Data["enable-mcg"] = []byte("NO")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
@@ -592,7 +592,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			When("there is a valid enable-mcg value in the addon-on parameters secret which is false", func() {
 				It("should not change storagecluster's MCG reconcile strategy to manage", func() {
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					secret.Data["enable-mcg"] = []byte("false")
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
@@ -609,7 +609,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			When("there is a valid enable-mcg value in the addon-on parameters secret which is true", func() {
 				It("should change storagecluster's MCG reconcile strategy to manage", func() {
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					secret.Data["enable-mcg"] = []byte("true")
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
@@ -665,7 +665,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
 						secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
 					case providerDeploymentType:
-						secret.Data["size"] = []byte("1")
+						secret.Data["size"] = []byte("4")
 						secret.Data["enable-mcg"] = []byte("false")
 						secret.Data["onboarding-validation-key"] = []byte("   test-validation-key   ")
 					}
@@ -717,8 +717,14 @@ var _ = Describe("ManagedOCS controller", func() {
 						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
 					}
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("4")
-					secret.Data["enable-mcg"] = []byte("false")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("2")
+						secret.Data["enable-mcg"] = []byte("false")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("8")
+						secret.Data["enable-mcg"] = []byte("false")
+					}
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 					// wait for the storagecluster to update
@@ -737,7 +743,7 @@ var _ = Describe("ManagedOCS controller", func() {
 								break
 							}
 						}
-						return ds != nil && ds.Count == 4
+						return ds != nil && ds.Count == 2
 					}, timeout, interval).Should(BeTrue())
 
 				})
@@ -747,9 +753,16 @@ var _ = Describe("ManagedOCS controller", func() {
 					if testReconciler.DeploymentType == consumerDeploymentType {
 						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
 					}
+
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
-					secret.Data["enable-mcg"] = []byte("false")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["enable-mcg"] = []byte("false")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("4")
+						secret.Data["enable-mcg"] = []byte("false")
+					}
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 					Consistently(func() bool {
@@ -767,11 +780,16 @@ var _ = Describe("ManagedOCS controller", func() {
 								break
 							}
 						}
-						return ds != nil && ds.Count == 4
+						return ds != nil && ds.Count == 2
 					}, timeout, interval).Should(BeTrue())
 
 					// Revert the size in add-on param secret
-					secret.Data["size"] = []byte("4")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("2")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("8")
+					}
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 				})
 			})
