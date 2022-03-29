@@ -30,7 +30,7 @@ import (
 // StorageClusterTemplate is the template that serves as the base for the storage clsuter deployed by the operator
 
 const (
-	OSDSizeInTerabytes = 4
+	ProviderOSDSizeInTiB = 4
 )
 
 var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
@@ -73,7 +73,7 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 					VolumeMode: &volumeModeBlock,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							"storage": resource.MustParse(fmt.Sprintf("%dTi", OSDSizeInTerabytes)),
+							"storage": resource.MustParse(fmt.Sprintf("%dTi", ProviderOSDSizeInTiB)),
 						},
 					},
 				},
