@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -749,10 +750,13 @@ func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.Storag
 		enableMCGAsString = enableMCGRaw
 	}
 	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
-	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
+	desiredSize, err := strconv.Atoi(sizeAsString)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
 	}
+
+	// Convert the desired size to the device set count based on the underlaying OSD size
+	desiredDeviceSetCount := int(math.Ceil(float64(desiredSize) / templates.ProviderOSDSizeInTiB))
 
 	// Get the storage device set count of the current storage cluster
 	currDeviceSetCount := 0
