@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -574,6 +575,29 @@ var _ = Describe("ManagedOCS controller", func() {
 					Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 				})
 			})
+			When("there is an invalid storage unit value in the add-on parameters secret", func() {
+				It("should not create reconciled resources", func() {
+					if testReconciler.DeploymentType != consumerDeploymentType {
+						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
+					}
+
+					secret := addonParamsSecretTemplate.DeepCopy()
+					secret.Data["size"] = []byte("4")
+					secret.Data["unit"] = []byte("AA")
+					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+					// Ensure, over a period of time, that the resources are not created
+					resList := []client.Object{
+						scTemplate.DeepCopy(),
+						promTemplate.DeepCopy(),
+						amTemplate.DeepCopy(),
+					}
+					utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
+
+					// Remove the secret for future cases
+					Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+				})
+			})
 			When("there is no enable-mcg field in the add-on parameters secret", func() {
 				It("should not create storagecluster", func() {
 					Skip("Skipping this test till Nooba MCG is integrated in deployer")
@@ -668,6 +692,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						secret.Data["enable-mcg"] = []byte("false")
 					case consumerDeploymentType:
 						secret.Data["size"] = []byte("1")
+						secret.Data["unit"] = []byte("Ti")
 						secret.Data["enable-mcg"] = []byte("false")
 						secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
 						secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
@@ -691,9 +716,13 @@ var _ = Describe("ManagedOCS controller", func() {
 						ds := sc.Spec.StorageDeviceSets[0]
 						Expect(ds.Count).Should(Equal(1))
 					case consumerDeploymentType:
-						Expect(sc.Spec.ExternalStorage.Enable).Should(BeTrue())
-						Expect(sc.Spec.ExternalStorage.OnboardingTicket).Should(Equal("onboarding-tickets"))
-						Expect(sc.Spec.ExternalStorage.StorageProviderEndpoint).Should(Equal("0.0.0.0:36179"))
+						es := &sc.Spec.ExternalStorage
+						Expect(es.Enable).Should(BeTrue())
+						Expect(es.OnboardingTicket).Should(Equal("onboarding-tickets"))
+						Expect(es.StorageProviderEndpoint).Should(Equal("0.0.0.0:36179"))
+
+						sizeInBytes, _ := es.RequestedCapacity.AsInt64()
+						Expect(sizeInBytes).Should(Equal(int64(math.Pow(1024, 4))))
 					case providerDeploymentType:
 						ds := sc.Spec.StorageDeviceSets[0]
 						Expect(ds.Count).Should(Equal(1))

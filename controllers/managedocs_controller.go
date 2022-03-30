@@ -72,6 +72,7 @@ const (
 	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
 	dmsRuleName                            = "dms-monitor-rule"
 	storageSizeKey                         = "size"
+	storageUnitKey                         = "unit"
 	onboardingTicketKey                    = "onboarding-ticket"
 	storageProviderEndpointKey             = "storage-provider-endpoint"
 	enableMCGKey                           = "enable-mcg"
@@ -787,8 +788,8 @@ func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.Storag
 }
 
 func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.StorageCluster, error) {
-
-	sizeAsString := r.addonParams[storageSizeKey]
+	storageSize := r.addonParams[storageSizeKey]
+	storageUnit := r.addonParams[storageUnitKey]
 	onboardingTicket := r.addonParams[onboardingTicketKey]
 	storageProviderEndpoint := r.addonParams[storageProviderEndpointKey]
 
@@ -798,9 +799,10 @@ func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.Storag
 		enableMCGAsString = enableMCGRaw
 	}
 
-	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString,
+	r.Log.Info("Requested add-on settings", storageSizeKey, storageSize, storageUnitKey, storageUnit, enableMCGKey, enableMCGAsString,
 		onboardingTicketKey, onboardingTicket, storageProviderEndpointKey, storageProviderEndpoint)
 
+	sizeAsString := storageSize + storageUnit
 	requestedCapacity, err := resource.ParseQuantity(sizeAsString)
 	// Check if the requested capacity is valid
 	if err != nil || requestedCapacity.Sign() == -1 {
