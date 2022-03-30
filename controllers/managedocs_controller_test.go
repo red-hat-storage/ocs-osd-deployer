@@ -192,38 +192,49 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
-	pvc1StorageClassName := storageClassRbdName
-	pvc1Template := corev1.PersistentVolumeClaim{
+	pv1StorageClassName := storageClassRbdName
+	pv1Template := corev1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pvc-1",
+			Name:      "test-pv-1",
 			Namespace: testPrimaryNamespace,
 		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &pvc1StorageClassName,
+		Spec: corev1.PersistentVolumeSpec{
+			StorageClassName: pv1StorageClassName,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("1Gi"),
+			Capacity: corev1.ResourceList{
+				corev1.ResourceStorage: resource.MustParse("1Gi"),
+			},
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				RBD: &corev1.RBDPersistentVolumeSource{
+					CephMonitors: []string{
+						"0.0.0.0:6789",
+					},
+					RBDImage: "test",
 				},
 			},
 		},
 	}
-	pvc2StorageClassName := storageClassCephFSName
-	pvc2Template := corev1.PersistentVolumeClaim{
+	pv2StorageClassName := storageClassCephFSName
+	pv2Template := corev1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pvc-2",
-			Namespace: testPrimaryNamespace,
+			Name:      "test-pv-2",
+			Namespace: testSecondaryNamespace,
 		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &pvc2StorageClassName,
+		Spec: corev1.PersistentVolumeSpec{
+			StorageClassName: pv2StorageClassName,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("1Gi"),
+			Capacity: corev1.ResourceList{
+				corev1.ResourceStorage: resource.MustParse("1Gi"),
+			},
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				CephFS: &corev1.CephFSPersistentVolumeSource{
+					Monitors: []string{
+						"0.0.0.0:6789",
+					},
 				},
 			},
 		},
@@ -301,8 +312,8 @@ var _ = Describe("ManagedOCS controller", func() {
 		shouldStorageClusterBeReady bool,
 		shouldPrometheusBeReady bool,
 		shouldAlertmanagerBeReady bool,
-		shouldPVC1Exist bool,
-		shouldPVC2Exist bool,
+		shouldPV1Exist bool,
+		shouldPV2Exist bool,
 	) {
 		// Delete the configmap to ensure that we will not trigger uninstall accidentally
 		// via and intermediate state
@@ -356,33 +367,29 @@ var _ = Describe("ManagedOCS controller", func() {
 		}
 		Expect(k8sClient.Status().Update(ctx, amSts)).Should(Succeed())
 
-		// Setup pvc1 state (an rbd backed pvc in the primary namespace)
-		pvc1 := pvc1Template.DeepCopy()
-		if shouldPVC1Exist {
-			err := k8sClient.Create(ctx, pvc1)
+		// Setup pv1 state (an rbd backed pv in the primary namespace)
+		pv1 := pv1Template.DeepCopy()
+		if shouldPV1Exist {
+			err := k8sClient.Create(ctx, pv1)
 			Expect(err == nil || errors.IsAlreadyExists(err)).Should(BeTrue())
 		} else {
-			err := k8sClient.Get(ctx, utils.GetResourceKey(pvc1), pvc1)
+			err := k8sClient.Get(ctx, utils.GetResourceKey(pv1), pv1)
 			if err == nil {
-				pvc1.SetFinalizers(ctrlutils.Remove(pvc1.GetFinalizers(), "kubernetes.io/pvc-protection"))
-				Expect(k8sClient.Status().Update(ctx, pvc1)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, pvc1)).Should(Succeed())
+				Expect(k8sClient.Delete(ctx, pv1)).Should(Succeed())
 			} else {
 				Expect(errors.IsNotFound(err)).Should(BeTrue())
 			}
 		}
 
-		// Setup pvc2 state (an cephfs backed pvc in the secondary namespace)
-		pvc2 := pvc2Template.DeepCopy()
-		if shouldPVC2Exist {
-			err := k8sClient.Create(ctx, pvc2)
+		// Setup pv2 state (an cephfs backed pv in the secondary namespace)
+		pv2 := pv2Template.DeepCopy()
+		if shouldPV2Exist {
+			err := k8sClient.Create(ctx, pv2)
 			Expect(err == nil || errors.IsAlreadyExists(err)).Should(BeTrue())
 		} else {
-			err := k8sClient.Get(ctx, utils.GetResourceKey(pvc2), pvc2)
+			err := k8sClient.Get(ctx, utils.GetResourceKey(pv2), pv2)
 			if err == nil {
-				pvc2.SetFinalizers(ctrlutils.Remove(pvc2.GetFinalizers(), "kubernetes.io/pvc-protection"))
-				Expect(k8sClient.Status().Update(ctx, pvc2)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, pvc2)).Should(Succeed())
+				Expect(k8sClient.Delete(ctx, pv2)).Should(Succeed())
 			} else {
 				Expect(errors.IsNotFound(err)).Should(BeTrue())
 			}
@@ -1738,7 +1745,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					}, timeout, interval).Should(Succeed())
 				})
 			})
-			When("there are pvcs in the primary namespace while all other uninstall conditions are met", func() {
+			When("there are PVs in the primary namespace while all other uninstall conditions are met", func() {
 				It("should not delete the managedOCS resource", func() {
 					setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, true, false)
 
@@ -1749,7 +1756,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					}, timeout, interval).Should(Succeed())
 				})
 			})
-			When("there are pvcs in a secondary namespace while all other uninstall conditions are met", func() {
+			When("there are PVs in a secondary namespace while all other uninstall conditions are met", func() {
 				It("should not delete the managedOCS resource", func() {
 					setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, false, true)
 

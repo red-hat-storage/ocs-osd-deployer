@@ -9,7 +9,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims
+  - persistentvolume
   - secrets
   verbs:
   - get
