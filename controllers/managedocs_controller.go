@@ -156,7 +156,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources={persistentvolume,secrets},verbs=get;list;watch
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
@@ -1513,15 +1513,15 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 		}
 	}
 
-	// get all the PVCs
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.UnrestrictedClient.List(r.ctx, pvcList); err != nil {
-		return false, fmt.Errorf("unable to list pvcs: %v", err)
+	// get all the PVs
+	pvList := &corev1.PersistentVolumeList{}
+	if err := r.UnrestrictedClient.List(r.ctx, pvList); err != nil {
+		return false, fmt.Errorf("unable to list persistent volumes: %v", err)
 	}
 
-	// check if there are any PVCs using OCS storage classes
-	for i := range pvcList.Items {
-		scName := *pvcList.Items[i].Spec.StorageClassName
+	// check if there are any PVs using OCS storage classes
+	for i := range pvList.Items {
+		scName := pvList.Items[i].Spec.StorageClassName
 		if ocsStorageClass[scName] {
 			return true, nil
 		}
