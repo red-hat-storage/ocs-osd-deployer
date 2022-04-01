@@ -157,7 +157,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources={persistentvolume,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources={persistentvolumes,secrets},verbs=get;list;watch
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
