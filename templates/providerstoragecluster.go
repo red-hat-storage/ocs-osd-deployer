@@ -17,6 +17,8 @@ limitations under the License.
 package templates
 
 import (
+	"fmt"
+
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	rook "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -26,6 +28,10 @@ import (
 )
 
 // StorageClusterTemplate is the template that serves as the base for the storage clsuter deployed by the operator
+
+const (
+	ProviderOSDSizeInTiB = 4
+)
 
 var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 	Spec: ocsv1.StorageClusterSpec{
@@ -67,7 +73,7 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 					VolumeMode: &volumeModeBlock,
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							"storage": resource.MustParse("4Ti"),
+							"storage": resource.MustParse(fmt.Sprintf("%dTi", ProviderOSDSizeInTiB)),
 						},
 					},
 				},

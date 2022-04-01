@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -71,6 +72,7 @@ const (
 	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
 	dmsRuleName                            = "dms-monitor-rule"
 	storageSizeKey                         = "size"
+	storageUnitKey                         = "unit"
 	onboardingTicketKey                    = "onboarding-ticket"
 	storageProviderEndpointKey             = "storage-provider-endpoint"
 	enableMCGKey                           = "enable-mcg"
@@ -155,7 +157,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources={persistentvolume,secrets},verbs=get;list;watch
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
@@ -749,10 +751,13 @@ func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.Storag
 		enableMCGAsString = enableMCGRaw
 	}
 	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
-	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
+	desiredSize, err := strconv.Atoi(sizeAsString)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
 	}
+
+	// Convert the desired size to the device set count based on the underlaying OSD size
+	desiredDeviceSetCount := int(math.Ceil(float64(desiredSize) / templates.ProviderOSDSizeInTiB))
 
 	// Get the storage device set count of the current storage cluster
 	currDeviceSetCount := 0
@@ -783,8 +788,8 @@ func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.Storag
 }
 
 func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.StorageCluster, error) {
-
-	sizeAsString := r.addonParams[storageSizeKey]
+	storageSize := r.addonParams[storageSizeKey]
+	storageUnit := r.addonParams[storageUnitKey]
 	onboardingTicket := r.addonParams[onboardingTicketKey]
 	storageProviderEndpoint := r.addonParams[storageProviderEndpointKey]
 
@@ -794,9 +799,10 @@ func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.Storag
 		enableMCGAsString = enableMCGRaw
 	}
 
-	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString,
+	r.Log.Info("Requested add-on settings", storageSizeKey, storageSize, storageUnitKey, storageUnit, enableMCGKey, enableMCGAsString,
 		onboardingTicketKey, onboardingTicket, storageProviderEndpointKey, storageProviderEndpoint)
 
+	sizeAsString := storageSize + storageUnit
 	requestedCapacity, err := resource.ParseQuantity(sizeAsString)
 	// Check if the requested capacity is valid
 	if err != nil || requestedCapacity.Sign() == -1 {
@@ -1509,15 +1515,15 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 		}
 	}
 
-	// get all the PVCs
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.UnrestrictedClient.List(r.ctx, pvcList); err != nil {
-		return false, fmt.Errorf("unable to list pvcs: %v", err)
+	// get all the PVs
+	pvList := &corev1.PersistentVolumeList{}
+	if err := r.UnrestrictedClient.List(r.ctx, pvList); err != nil {
+		return false, fmt.Errorf("unable to list persistent volumes: %v", err)
 	}
 
-	// check if there are any PVCs using OCS storage classes
-	for i := range pvcList.Items {
-		scName := *pvcList.Items[i].Spec.StorageClassName
+	// check if there are any PVs using OCS storage classes
+	for i := range pvList.Items {
+		scName := pvList.Items[i].Spec.StorageClassName
 		if ocsStorageClass[scName] {
 			return true, nil
 		}
