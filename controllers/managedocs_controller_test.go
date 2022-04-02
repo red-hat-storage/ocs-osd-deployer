@@ -489,6 +489,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			} else {
 				Expect(k8sClient.Create(ctx, pdSecret)).Should(Succeed())
 			}
+			utils.WaitForResource(k8sClient, ctx, pdSecret, timeout*3, interval)
 		} else if pdSecretExists {
 			Expect(k8sClient.Delete(ctx, pdSecret)).Should(Succeed())
 		}
