@@ -46,6 +46,18 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	promServiceTemplate := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusServiceName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
+	caBundleConfigMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      servingCertCABundleConfigMapName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 	promTemplate := promv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prometheusName,
@@ -494,6 +506,19 @@ var _ = Describe("ManagedOCS controller", func() {
 		}
 	}
 
+	assertPrometheusTLSConfigValues := func(ctx context.Context,
+		client client.Client) {
+		prom := promTemplate.DeepCopy()
+		Expect(client.Get(ctx, utils.GetResourceKey(prom), prom)).Should(Succeed())
+		tlsConfig := prom.Spec.Web.TLSConfig
+		Expect(tlsConfig.KeySecret.LocalObjectReference.Name).Should(Equal(prometheusServiceSecretName))
+		Expect(tlsConfig.Cert.Secret.LocalObjectReference.Name).Should(Equal(prometheusServiceSecretName))
+		Expect(tlsConfig.ClientCA.ConfigMap.LocalObjectReference.Name).Should(Equal(servingCertCABundleConfigMapName))
+		Expect(tlsConfig.ClientCA.ConfigMap.Key).Should(Equal("service-ca.crt"))
+		Expect(tlsConfig.KeySecret.Key).Should(Equal("tls.key"))
+		Expect(tlsConfig.Cert.Secret.Key).Should(Equal("tls.crt"))
+	}
+
 	runTests := func(deploymentType string) {
 		Context(fmt.Sprintf("reconcile() %s mode", deploymentType), Ordered, func() {
 			BeforeAll(func() {
@@ -730,8 +755,13 @@ var _ = Describe("ManagedOCS controller", func() {
 						Expect(sc.Spec.AllowRemoteStorageConsumers).Should(BeTrue())
 					}
 
+					By("Creating a prometheus service resource")
+					utils.WaitForResource(k8sClient, ctx, promServiceTemplate.DeepCopy(), timeout, interval)
+					By("Creating serving cert CA bundle configmap")
+					utils.WaitForResource(k8sClient, ctx, caBundleConfigMap.DeepCopy(), timeout, interval)
 					By("Creating a prometheus resource")
 					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
+					assertPrometheusTLSConfigValues(ctx, k8sClient)
 
 					By("Creating an alertmanager resource")
 					utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
