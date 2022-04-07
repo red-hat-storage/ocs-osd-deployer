@@ -427,12 +427,8 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if r.verifyComponentsDoNotExist() {
 			// Deleting OCS CSV from the namespace
 			r.Log.Info("deleting OCS CSV")
-			if csv, err := r.getCSVByPrefix(ocsOperatorName); err == nil {
-				if err := r.delete(csv); err != nil {
-					return ctrl.Result{}, fmt.Errorf("unable to delete csv: %v", err)
-				}
-			} else {
-				return ctrl.Result{}, err
+			if err := r.deleteCSVByPrefix(ocsOperatorName); err != nil {
+				return ctrl.Result{}, fmt.Errorf("unable to delete csv: %v", err)
 			}
 
 			r.Log.Info("removing finalizer from the ManagedOCS resource")
@@ -1110,6 +1106,7 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() err
 		var err error = nil
 		if auth, err = r.readGrafanaV1Secret(); err != nil {
 			if errors.IsNotFound(err) {
+				r.Log.Info("Unable to find v1 grafana-datasources secret")
 				auth, err = r.readGrafanaV2Secret()
 			}
 			if err != nil {
@@ -1617,15 +1614,11 @@ func (r *ManagedOCSReconciler) updateMCGCSV(csv *opv1a1.ClusterServiceVersion) e
 func (r *ManagedOCSReconciler) removeOLMComponents() error {
 
 	r.Log.Info("deleting deployer csv")
-	if csv, err := r.getCSVByPrefix(deployerCSVPrefix); err == nil {
-		if err := r.delete(csv); err != nil {
-			return fmt.Errorf("Unable to delete csv: %v", err)
-		} else {
-			r.Log.Info("Deployer csv removed successfully")
-			return nil
-		}
+	if err := r.deleteCSVByPrefix(deployerCSVPrefix); err != nil {
+		return fmt.Errorf("Unable to delete csv: %v", err)
 	} else {
-		return err
+		r.Log.Info("Deployer csv removed successfully")
+		return nil
 	}
 }
 
@@ -1658,10 +1651,10 @@ func (r *ManagedOCSReconciler) own(resource metav1.Object) error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServiceVersion, error) {
+func (r *ManagedOCSReconciler) deleteCSVByPrefix(name string) error {
 	csvList := opv1a1.ClusterServiceVersionList{}
 	if err := r.list(&csvList); err != nil {
-		return nil, fmt.Errorf("unable to list csv resources: %v", err)
+		return fmt.Errorf("unable to list csv resources: %v", err)
 	}
 
 	var csv *opv1a1.ClusterServiceVersion = nil
@@ -1672,7 +1665,14 @@ func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServi
 			break
 		}
 	}
-	return csv, nil
+
+	// There might be a chance that csv was deleted in previous reconcile, so
+	// check for it's existence before deleting
+	if csv != nil {
+		return r.delete(csv)
+	}
+
+	return nil
 }
 
 func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {
