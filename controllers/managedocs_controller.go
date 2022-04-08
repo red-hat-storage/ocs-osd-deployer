@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -71,6 +72,7 @@ const (
 	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
 	dmsRuleName                            = "dms-monitor-rule"
 	storageSizeKey                         = "size"
+	storageUnitKey                         = "unit"
 	onboardingTicketKey                    = "onboarding-ticket"
 	storageProviderEndpointKey             = "storage-provider-endpoint"
 	enableMCGKey                           = "enable-mcg"
@@ -85,6 +87,7 @@ const (
 	egressNetworkPolicyName                = "egress-rule"
 	ingressNetworkPolicyName               = "ingress-rule"
 	cephIngressNetworkPolicyName           = "ceph-ingress-rule"
+	providerApiServerNetworkPolicyName     = "provider-api-server-rule"
 	monLabelKey                            = "app"
 	monLabelValue                          = "managed-ocs"
 	rookConfigMapName                      = "rook-ceph-operator-config"
@@ -125,6 +128,7 @@ type ManagedOCSReconciler struct {
 	egressNetworkPolicy                *openshiftv1.EgressNetworkPolicy
 	ingressNetworkPolicy               *netv1.NetworkPolicy
 	cephIngressNetworkPolicy           *netv1.NetworkPolicy
+	providerAPIServerNetworkPolicy     *netv1.NetworkPolicy
 	prometheus                         *promv1.Prometheus
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
@@ -153,7 +157,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources={persistentvolumeclaims,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources={persistentvolumes,secrets},verbs=get;list;watch
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
@@ -362,6 +366,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.cephIngressNetworkPolicy.Name = cephIngressNetworkPolicyName
 	r.cephIngressNetworkPolicy.Namespace = r.namespace
 
+	r.providerAPIServerNetworkPolicy = &netv1.NetworkPolicy{}
+	r.providerAPIServerNetworkPolicy.Name = providerApiServerNetworkPolicyName
+	r.providerAPIServerNetworkPolicy.Namespace = r.namespace
+
 	r.prometheus = &promv1.Prometheus{}
 	r.prometheus.Name = prometheusName
 	r.prometheus.Namespace = r.namespace
@@ -487,7 +495,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		// Reconciles only for provider deployment type
-		if err := r.reconcileOnboardinValidationSecret(); err != nil {
+		if err := r.reconcileOnboardingValidationSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileStorageCluster(); err != nil {
@@ -523,17 +531,17 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileOCSInitialization(); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Fix for non-converged deployment type will be provided in upcoming PR
-		if r.DeploymentType == convergedDeploymentType {
-			if err := r.reconcileEgressNetworkPolicy(); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.reconcileIngressNetworkPolicy(); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
-				return ctrl.Result{}, err
-			}
+		if err := r.reconcileEgressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
@@ -743,10 +751,13 @@ func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.Storag
 		enableMCGAsString = enableMCGRaw
 	}
 	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString)
-	desiredDeviceSetCount, err := strconv.Atoi(sizeAsString)
+	desiredSize, err := strconv.Atoi(sizeAsString)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid storage cluster size value: %v", sizeAsString)
 	}
+
+	// Convert the desired size to the device set count based on the underlaying OSD size
+	desiredDeviceSetCount := int(math.Ceil(float64(desiredSize) / templates.ProviderOSDSizeInTiB))
 
 	// Get the storage device set count of the current storage cluster
 	currDeviceSetCount := 0
@@ -777,8 +788,8 @@ func (r *ManagedOCSReconciler) getDesiredProviderStorageCluster() (*ocsv1.Storag
 }
 
 func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.StorageCluster, error) {
-
-	sizeAsString := r.addonParams[storageSizeKey]
+	storageSize := r.addonParams[storageSizeKey]
+	storageUnit := r.addonParams[storageUnitKey]
 	onboardingTicket := r.addonParams[onboardingTicketKey]
 	storageProviderEndpoint := r.addonParams[storageProviderEndpointKey]
 
@@ -788,9 +799,10 @@ func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.Storag
 		enableMCGAsString = enableMCGRaw
 	}
 
-	r.Log.Info("Requested add-on settings", storageSizeKey, sizeAsString, enableMCGKey, enableMCGAsString,
+	r.Log.Info("Requested add-on settings", storageSizeKey, storageSize, storageUnitKey, storageUnit, enableMCGKey, enableMCGAsString,
 		onboardingTicketKey, onboardingTicket, storageProviderEndpointKey, storageProviderEndpoint)
 
+	sizeAsString := storageSize + storageUnit
 	requestedCapacity, err := resource.ParseQuantity(sizeAsString)
 	// Check if the requested capacity is valid
 	if err != nil || requestedCapacity.Sign() == -1 {
@@ -815,7 +827,7 @@ func (r *ManagedOCSReconciler) getDesiredConsumerStorageCluster() (*ocsv1.Storag
 	return sc, nil
 }
 
-func (r *ManagedOCSReconciler) reconcileOnboardinValidationSecret() error {
+func (r *ManagedOCSReconciler) reconcileOnboardingValidationSecret() error {
 	if r.DeploymentType != providerDeploymentType {
 		r.Log.Info("Non provider deployment, skipping reconcile for onboarding validation secret")
 		return nil
@@ -1355,6 +1367,11 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
+	// Fix for non-converged deployment type will be provided in upcoming PR
+	if r.DeploymentType != convergedDeploymentType {
+		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
+		return nil
+	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
 		if err := r.own(r.egressNetworkPolicy); err != nil {
 			return err
@@ -1439,6 +1456,25 @@ func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
 	return nil
 }
 
+func (r *ManagedOCSReconciler) reconcileProviderAPIServerNetworkPolicy() error {
+	if r.DeploymentType != providerDeploymentType {
+		r.Log.Info("Non provider deployment, skipping reconcile for api server ingress policy")
+		return nil
+	}
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.providerAPIServerNetworkPolicy, func() error {
+		if err := r.own(r.providerAPIServerNetworkPolicy); err != nil {
+			return err
+		}
+		desired := templates.ProviderApiServerNetworkPolicyTemplate.DeepCopy()
+		r.providerAPIServerNetworkPolicy.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update provider api server NetworkPolicy: %v", err)
+	}
+	return nil
+}
+
 func (r *ManagedOCSReconciler) checkUninstallCondition() bool {
 	configmap := &corev1.ConfigMap{}
 	configmap.Name = r.AddonConfigMapName
@@ -1479,15 +1515,15 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 		}
 	}
 
-	// get all the PVCs
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.UnrestrictedClient.List(r.ctx, pvcList); err != nil {
-		return false, fmt.Errorf("unable to list pvcs: %v", err)
+	// get all the PVs
+	pvList := &corev1.PersistentVolumeList{}
+	if err := r.UnrestrictedClient.List(r.ctx, pvList); err != nil {
+		return false, fmt.Errorf("unable to list persistent volumes: %v", err)
 	}
 
-	// check if there are any PVCs using OCS storage classes
-	for i := range pvcList.Items {
-		scName := *pvcList.Items[i].Spec.StorageClassName
+	// check if there are any PVs using OCS storage classes
+	for i := range pvList.Items {
+		scName := pvList.Items[i].Spec.StorageClassName
 		if ocsStorageClass[scName] {
 			return true, nil
 		}

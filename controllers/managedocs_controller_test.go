@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -186,38 +187,55 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
-	pvc1StorageClassName := storageClassRbdName
-	pvc1Template := corev1.PersistentVolumeClaim{
+	providerApiServerIngressNetworkPolicyTemplate := netv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pvc-1",
+			Name:      providerApiServerNetworkPolicyName,
 			Namespace: testPrimaryNamespace,
 		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &pvc1StorageClassName,
+	}
+	pv1StorageClassName := storageClassRbdName
+	pv1Template := corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pv-1",
+			Namespace: testPrimaryNamespace,
+		},
+		Spec: corev1.PersistentVolumeSpec{
+			StorageClassName: pv1StorageClassName,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("1Gi"),
+			Capacity: corev1.ResourceList{
+				corev1.ResourceStorage: resource.MustParse("1Gi"),
+			},
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				RBD: &corev1.RBDPersistentVolumeSource{
+					CephMonitors: []string{
+						"0.0.0.0:6789",
+					},
+					RBDImage: "test",
 				},
 			},
 		},
 	}
-	pvc2StorageClassName := storageClassCephFSName
-	pvc2Template := corev1.PersistentVolumeClaim{
+	pv2StorageClassName := storageClassCephFSName
+	pv2Template := corev1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pvc-2",
-			Namespace: testPrimaryNamespace,
+			Name:      "test-pv-2",
+			Namespace: testSecondaryNamespace,
 		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &pvc2StorageClassName,
+		Spec: corev1.PersistentVolumeSpec{
+			StorageClassName: pv2StorageClassName,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("1Gi"),
+			Capacity: corev1.ResourceList{
+				corev1.ResourceStorage: resource.MustParse("1Gi"),
+			},
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				CephFS: &corev1.CephFSPersistentVolumeSource{
+					Monitors: []string{
+						"0.0.0.0:6789",
+					},
 				},
 			},
 		},
@@ -282,6 +300,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	onboardingValidationKeySecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      onboardingValidationKeySecretName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -289,8 +313,8 @@ var _ = Describe("ManagedOCS controller", func() {
 		shouldStorageClusterBeReady bool,
 		shouldPrometheusBeReady bool,
 		shouldAlertmanagerBeReady bool,
-		shouldPVC1Exist bool,
-		shouldPVC2Exist bool,
+		shouldPV1Exist bool,
+		shouldPV2Exist bool,
 	) {
 		// Delete the configmap to ensure that we will not trigger uninstall accidentally
 		// via and intermediate state
@@ -344,33 +368,29 @@ var _ = Describe("ManagedOCS controller", func() {
 		}
 		Expect(k8sClient.Status().Update(ctx, amSts)).Should(Succeed())
 
-		// Setup pvc1 state (an rbd backed pvc in the primary namespace)
-		pvc1 := pvc1Template.DeepCopy()
-		if shouldPVC1Exist {
-			err := k8sClient.Create(ctx, pvc1)
+		// Setup pv1 state (an rbd backed pv in the primary namespace)
+		pv1 := pv1Template.DeepCopy()
+		if shouldPV1Exist {
+			err := k8sClient.Create(ctx, pv1)
 			Expect(err == nil || errors.IsAlreadyExists(err)).Should(BeTrue())
 		} else {
-			err := k8sClient.Get(ctx, utils.GetResourceKey(pvc1), pvc1)
+			err := k8sClient.Get(ctx, utils.GetResourceKey(pv1), pv1)
 			if err == nil {
-				pvc1.SetFinalizers(ctrlutils.Remove(pvc1.GetFinalizers(), "kubernetes.io/pvc-protection"))
-				Expect(k8sClient.Status().Update(ctx, pvc1)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, pvc1)).Should(Succeed())
+				Expect(k8sClient.Delete(ctx, pv1)).Should(Succeed())
 			} else {
 				Expect(errors.IsNotFound(err)).Should(BeTrue())
 			}
 		}
 
-		// Setup pvc2 state (an cephfs backed pvc in the secondary namespace)
-		pvc2 := pvc2Template.DeepCopy()
-		if shouldPVC2Exist {
-			err := k8sClient.Create(ctx, pvc2)
+		// Setup pv2 state (an cephfs backed pv in the secondary namespace)
+		pv2 := pv2Template.DeepCopy()
+		if shouldPV2Exist {
+			err := k8sClient.Create(ctx, pv2)
 			Expect(err == nil || errors.IsAlreadyExists(err)).Should(BeTrue())
 		} else {
-			err := k8sClient.Get(ctx, utils.GetResourceKey(pvc2), pvc2)
+			err := k8sClient.Get(ctx, utils.GetResourceKey(pv2), pv2)
 			if err == nil {
-				pvc2.SetFinalizers(ctrlutils.Remove(pvc2.GetFinalizers(), "kubernetes.io/pvc-protection"))
-				Expect(k8sClient.Status().Update(ctx, pvc2)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, pvc2)).Should(Succeed())
+				Expect(k8sClient.Delete(ctx, pv2)).Should(Succeed())
 			} else {
 				Expect(errors.IsNotFound(err)).Should(BeTrue())
 			}
@@ -555,11 +575,34 @@ var _ = Describe("ManagedOCS controller", func() {
 					Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
 				})
 			})
+			When("there is an invalid storage unit value in the add-on parameters secret", func() {
+				It("should not create reconciled resources", func() {
+					if testReconciler.DeploymentType != consumerDeploymentType {
+						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
+					}
+
+					secret := addonParamsSecretTemplate.DeepCopy()
+					secret.Data["size"] = []byte("4")
+					secret.Data["unit"] = []byte("AA")
+					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+					// Ensure, over a period of time, that the resources are not created
+					resList := []client.Object{
+						scTemplate.DeepCopy(),
+						promTemplate.DeepCopy(),
+						amTemplate.DeepCopy(),
+					}
+					utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
+
+					// Remove the secret for future cases
+					Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+				})
+			})
 			When("there is no enable-mcg field in the add-on parameters secret", func() {
 				It("should not create storagecluster", func() {
 					Skip("Skipping this test till Nooba MCG is integrated in deployer")
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 					// Ensure, over a period of time, that the resource is not created
 					utils.EnsureNoResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
@@ -569,7 +612,7 @@ var _ = Describe("ManagedOCS controller", func() {
 				It("should not create storagecluster", func() {
 					// Create a invalid enable-mcg parameter value
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					secret.Data["enable-mcg"] = []byte("NO")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
@@ -580,7 +623,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			When("there is a valid enable-mcg value in the addon-on parameters secret which is false", func() {
 				It("should not change storagecluster's MCG reconcile strategy to manage", func() {
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					secret.Data["enable-mcg"] = []byte("false")
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
@@ -597,7 +640,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			When("there is a valid enable-mcg value in the addon-on parameters secret which is true", func() {
 				It("should change storagecluster's MCG reconcile strategy to manage", func() {
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
+					secret.Data["size"] = []byte("4")
 					secret.Data["enable-mcg"] = []byte("true")
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
@@ -640,38 +683,52 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("there is a valid size in the add-on parameter secret", func() {
 				It("should create reconciled resources", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
-						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
-					}
+
 					// Create a valid add-on parameters secret
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
-					secret.Data["enable-mcg"] = []byte("false")
-					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-
-					By("Creating a storagecluster resource")
-					utils.WaitForResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
-
-					By("Creating a prometheus resource")
-					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
-
-					By("Creating an alertmanager resource")
-					utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
-				})
-				It("should create reconciled resources", func() {
-					if testReconciler.DeploymentType == convergedDeploymentType {
-						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["enable-mcg"] = []byte("false")
+					case consumerDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["unit"] = []byte("Ti")
+						secret.Data["enable-mcg"] = []byte("false")
+						secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
+						secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("4")
+						secret.Data["enable-mcg"] = []byte("false")
+						secret.Data["onboarding-validation-key"] = []byte("   test-validation-key   ")
 					}
-					// Create a valid add-on parameters secret
-					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
-					secret.Data["enable-mcg"] = []byte("false")
-					secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
-					secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
+					if testReconciler.DeploymentType == providerDeploymentType {
+						By("Creating a onboarding validation key secret resource")
+						utils.WaitForResource(k8sClient, ctx, onboardingValidationKeySecretTemplate.DeepCopy(), timeout, interval)
+					}
+
 					By("Creating a storagecluster resource")
-					utils.WaitForResource(k8sClient, ctx, scTemplate.DeepCopy(), timeout, interval)
+					sc := scTemplate.DeepCopy()
+					utils.WaitForResource(k8sClient, ctx, sc, timeout, interval)
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						ds := sc.Spec.StorageDeviceSets[0]
+						Expect(ds.Count).Should(Equal(1))
+					case consumerDeploymentType:
+						es := &sc.Spec.ExternalStorage
+						Expect(es.Enable).Should(BeTrue())
+						Expect(es.OnboardingTicket).Should(Equal("onboarding-tickets"))
+						Expect(es.StorageProviderEndpoint).Should(Equal("0.0.0.0:36179"))
+
+						sizeInBytes, _ := es.RequestedCapacity.AsInt64()
+						Expect(sizeInBytes).Should(Equal(int64(math.Pow(1024, 4))))
+					case providerDeploymentType:
+						ds := sc.Spec.StorageDeviceSets[0]
+						Expect(ds.Count).Should(Equal(1))
+						Expect(sc.Spec.HostNetwork).Should(BeTrue())
+						Expect(sc.Spec.AllowRemoteStorageConsumers).Should(BeTrue())
+					}
 
 					By("Creating a prometheus resource")
 					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
@@ -680,14 +737,30 @@ var _ = Describe("ManagedOCS controller", func() {
 					utils.WaitForResource(k8sClient, ctx, amTemplate.DeepCopy(), timeout, interval)
 				})
 			})
+			When("onboarding validation data was passed to addon param secret", func() {
+				It("should trim whitespace and add header and footer to the data", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
+						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
+					}
+					secret := onboardingValidationKeySecretTemplate.DeepCopy()
+					utils.WaitForResource(k8sClient, ctx, secret, timeout, interval)
+					Expect(secret.Data["key"]).Should(Equal([]byte("-----BEGIN PUBLIC KEY-----\ntest-validation-key\n-----END PUBLIC KEY-----")))
+				})
+			})
 			When("size is increased in the add-on parameters secret", func() {
 				It("should increase storagecluster's storage device set count", func() {
 					if testReconciler.DeploymentType == consumerDeploymentType {
 						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
 					}
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("4")
-					secret.Data["enable-mcg"] = []byte("false")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("2")
+						secret.Data["enable-mcg"] = []byte("false")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("8")
+						secret.Data["enable-mcg"] = []byte("false")
+					}
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 					// wait for the storagecluster to update
@@ -706,7 +779,7 @@ var _ = Describe("ManagedOCS controller", func() {
 								break
 							}
 						}
-						return ds != nil && ds.Count == 4
+						return ds != nil && ds.Count == 2
 					}, timeout, interval).Should(BeTrue())
 
 				})
@@ -716,9 +789,16 @@ var _ = Describe("ManagedOCS controller", func() {
 					if testReconciler.DeploymentType == consumerDeploymentType {
 						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
 					}
+
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("1")
-					secret.Data["enable-mcg"] = []byte("false")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("1")
+						secret.Data["enable-mcg"] = []byte("false")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("4")
+						secret.Data["enable-mcg"] = []byte("false")
+					}
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 
 					Consistently(func() bool {
@@ -736,11 +816,16 @@ var _ = Describe("ManagedOCS controller", func() {
 								break
 							}
 						}
-						return ds != nil && ds.Count == 4
+						return ds != nil && ds.Count == 2
 					}, timeout, interval).Should(BeTrue())
 
 					// Revert the size in add-on param secret
-					secret.Data["size"] = []byte("4")
+					switch testReconciler.DeploymentType {
+					case convergedDeploymentType:
+						secret.Data["size"] = []byte("2")
+					case providerDeploymentType:
+						secret.Data["size"] = []byte("8")
+					}
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 				})
 			})
@@ -1445,7 +1530,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the EgressNetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Get an updated EgressNetworkPolicy
@@ -1470,7 +1555,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the SNITCH_URL value in dms secret is modified", func() {
 				It("should update the EgressNetworkPolicy resource with the new snitch domain", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					dmsSecret := dmsSecretTemplate.DeepCopy()
@@ -1494,7 +1579,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the host value in smtp secret is modified", func() {
 				It("should update the EgressNetworkPolicy resource with the new host", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					smtpSecret := smtpSecretTemplate.DeepCopy()
@@ -1518,7 +1603,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the EgressNetworkPolicy resource is deleted", func() {
 				It("should create a new EgressNetworkPolicy in the namespace", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Delete the EgressNetworkPolicy resource
@@ -1530,7 +1615,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ingress NetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Get an updated NetworkPolicy
@@ -1553,7 +1638,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ingress NetworkPolicy resource is deleted", func() {
 				It("should create a new ingress NetworkPolicy in the namespace", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Delete the NetworkPolicy resource
@@ -1565,7 +1650,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ceph ingress NetworkPolicy resource is modified", func() {
 				It("should revert the changes and bring the resource back to its managed state", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Get an updated NetworkPolicy
@@ -1588,7 +1673,7 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("the ceph ingress NetworkPolicy resource is deleted", func() {
 				It("should create a new ingress NetworkPolicy in the namespace", func() {
-					if testReconciler.DeploymentType == consumerDeploymentType {
+					if testReconciler.DeploymentType != convergedDeploymentType {
 						Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
 					}
 					// Delete the NetworkPolicy resource
@@ -1596,6 +1681,31 @@ var _ = Describe("ManagedOCS controller", func() {
 
 					// Wait for the NetworkPolicy to be recreated
 					utils.WaitForResource(k8sClient, ctx, cephIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+				})
+			})
+			When("the provider api server ingress NetworkPolicy resource is modified", func() {
+				It("should create a new ingress NetworkPolicy in the namespace", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+					}
+
+					// Delete the NetworkPolicy resource
+					Expect(k8sClient.Delete(ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+					// Wait for the NetworkPolicy to be recreated
+					utils.WaitForResource(k8sClient, ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+				})
+			})
+			When("the provider api server ingress  NetworkPolicy resource is deleted", func() {
+				It("should create a new ingress NetworkPolicy in the namespace", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
+						Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+					}
+					// Delete the NetworkPolicy resource
+					Expect(k8sClient.Delete(ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+					// Wait for the NetworkPolicy to be recreated
+					utils.WaitForResource(k8sClient, ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 				})
 			})
 			When("the addon config map does not exist while all other uninstall conditions are met", func() {
@@ -1664,7 +1774,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					}, timeout, interval).Should(Succeed())
 				})
 			})
-			When("there are pvcs in the primary namespace while all other uninstall conditions are met", func() {
+			When("there are PVs in the primary namespace while all other uninstall conditions are met", func() {
 				It("should not delete the managedOCS resource", func() {
 					setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, true, false)
 
@@ -1675,7 +1785,7 @@ var _ = Describe("ManagedOCS controller", func() {
 					}, timeout, interval).Should(Succeed())
 				})
 			})
-			When("there are pvcs in a secondary namespace while all other uninstall conditions are met", func() {
+			When("there are PVs in a secondary namespace while all other uninstall conditions are met", func() {
 				It("should not delete the managedOCS resource", func() {
 					setupUninstallConditions(true, testAddonConfigMapDeleteLabelKey, true, true, false, false, true)
 
@@ -1733,5 +1843,5 @@ var _ = Describe("ManagedOCS controller", func() {
 
 	runTests(convergedDeploymentType)
 	runTests(consumerDeploymentType)
-
+	runTests(providerDeploymentType)
 })
