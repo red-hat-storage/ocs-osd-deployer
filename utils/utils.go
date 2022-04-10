@@ -17,8 +17,9 @@ limitations under the License.
 package utils
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Contains checks whether a string is contained within a slice
@@ -50,6 +51,15 @@ func AddLabel(obj metav1.Object, key string, value string) {
 		obj.SetLabels(labels)
 	}
 	labels[key] = value
+}
+
+func AddAnnotation(obj metav1.Object, key string, value string) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+		obj.SetAnnotations(annotations)
+	}
+	annotations[key] = value
 }
 
 // GetRegexMatcher converts list of alerts to regex matcher
