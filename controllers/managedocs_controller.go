@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -68,6 +69,11 @@ const (
 	managedOCSName                         = "managedocs"
 	storageClusterName                     = "ocs-storagecluster"
 	prometheusName                         = "managed-ocs-prometheus"
+	prometheusServiceName                  = "managed-ocs-prometheus-service"
+	servingCertSecretBetaAnnotationKey     = "service.beta.openshift.io/serving-cert-secret-name"
+	servingCertSecretAlphaAnnotationKey    = "service.alpha.openshift.io/serving-cert-secret-name"
+	servingCertConfigMapBetaAnnotationKey  = "service.beta.openshift.io/inject-cabundle"
+	servingCertConfigMapAlphaAnnotationKey = "service.alpha.openshift.io/inject-cabundle"
 	alertmanagerName                       = "managed-ocs-alertmanager"
 	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
 	dmsRuleName                            = "dms-monitor-rule"
@@ -102,6 +108,8 @@ const (
 	convergedDeploymentType                = "converged"
 	consumerDeploymentType                 = "consumer"
 	providerDeploymentType                 = "provider"
+	servingCertCABundleConfigMapName       = "prometheus-serving-cert-ca-bundle"
+	prometheusServiceSecretName            = "managed-ocs-prometheus-service-secret"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -130,6 +138,7 @@ type ManagedOCSReconciler struct {
 	cephIngressNetworkPolicy           *netv1.NetworkPolicy
 	providerAPIServerNetworkPolicy     *netv1.NetworkPolicy
 	prometheus                         *promv1.Prometheus
+	prometheusService                  *corev1.Service
 	dmsRule                            *promv1.PrometheusRule
 	alertmanager                       *promv1.Alertmanager
 	pagerdutySecret                    *corev1.Secret
@@ -143,6 +152,7 @@ type ManagedOCSReconciler struct {
 	reconcileStrategy                  v1.ReconcileStrategy
 	addonParams                        map[string]string
 	onboardingValidationKeySecret      *corev1.Secret
+	servingCertCaBundleConfigMap       *corev1.ConfigMap
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -158,6 +168,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={persistentvolumes,secrets},verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources={services},verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
@@ -255,6 +266,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
 		Owns(&corev1.Secret{}).
+		// prometheus tls -- will be uncommented
+		// Owns(&corev1.Service{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -374,6 +387,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.prometheus.Name = prometheusName
 	r.prometheus.Namespace = r.namespace
 
+	r.prometheusService = &corev1.Service{}
+	r.prometheusService.Name = prometheusServiceName
+	r.prometheusService.Namespace = r.namespace
+
 	r.dmsRule = &promv1.PrometheusRule{}
 	r.dmsRule.Name = dmsRuleName
 	r.dmsRule.Namespace = r.namespace
@@ -410,6 +427,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.alertRelabelConfigSecret.Name = alertRelabelConfigSecretName
 	r.alertRelabelConfigSecret.Namespace = r.namespace
 
+	r.servingCertCaBundleConfigMap = &corev1.ConfigMap{}
+	r.servingCertCaBundleConfigMap.Name = servingCertCABundleConfigMapName
+	r.servingCertCaBundleConfigMap.Namespace = r.namespace
+
 	r.onboardingValidationKeySecret = &corev1.Secret{}
 	r.onboardingValidationKeySecret.Name = onboardingValidationKeySecretName
 	r.onboardingValidationKeySecret.Namespace = r.namespace
@@ -427,12 +448,8 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if r.verifyComponentsDoNotExist() {
 			// Deleting OCS CSV from the namespace
 			r.Log.Info("deleting OCS CSV")
-			if csv, err := r.getCSVByPrefix(ocsOperatorName); err == nil {
-				if err := r.delete(csv); err != nil {
-					return ctrl.Result{}, fmt.Errorf("unable to delete csv: %v", err)
-				}
-			} else {
-				return ctrl.Result{}, err
+			if err := r.deleteCSVByPrefix(ocsOperatorName); err != nil {
+				return ctrl.Result{}, fmt.Errorf("unable to delete csv: %v", err)
 			}
 
 			r.Log.Info("removing finalizer from the ManagedOCS resource")
@@ -507,6 +524,13 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileAlertRelabelConfigSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
+		// prometheus tls -- will be uncommented
+		// if err := r.reconcilePrometheusService(); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
+		// if err := r.reconcileServingCertCABundleConfigMap(); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
 		if err := r.reconcilePrometheus(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -889,6 +913,51 @@ func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 	return nil
 }
 
+// reconcilePrometheusService function wait for prometheus Service
+// to start and sets appropriate annotation for 'service-ca' controller
+func (r *ManagedOCSReconciler) reconcilePrometheusService() error { //nolint:deadcode,unused
+	r.Log.Info("Reconciling prometheusService")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.prometheusService, func() error {
+		if err := r.own(r.prometheusService); err != nil {
+			return err
+		}
+
+		r.prometheusService.Spec.Ports = []corev1.ServicePort{
+			{
+				Name:       "odf-prometheus-endpoint",
+				Protocol:   corev1.ProtocolTCP,
+				Port:       9339,
+				TargetPort: intstr.FromString("web"),
+			},
+		}
+		r.prometheusService.Spec.Selector = map[string]string{
+			monLabelKey: monLabelValue,
+		}
+		utils.AddAnnotation(r.prometheusService,
+			servingCertSecretBetaAnnotationKey, prometheusServiceSecretName)
+		utils.AddAnnotation(r.prometheusService,
+			servingCertSecretAlphaAnnotationKey, prometheusServiceSecretName)
+		return nil
+	})
+	return err
+}
+
+func (r *ManagedOCSReconciler) reconcileServingCertCABundleConfigMap() error { //nolint:deadcode,unused
+	r.Log.Info("Reconciling servingCertCABundleConfigMap")
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.servingCertCaBundleConfigMap, func() error {
+		if err := r.own(r.servingCertCaBundleConfigMap); err != nil {
+			return err
+		}
+		utils.AddAnnotation(r.servingCertCaBundleConfigMap,
+			servingCertConfigMapBetaAnnotationKey, "true")
+		utils.AddAnnotation(r.servingCertCaBundleConfigMap,
+			servingCertConfigMapAlphaAnnotationKey, "true")
+		return nil
+	})
+	return err
+}
+
 func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 	r.Log.Info("Reconciling Prometheus")
 
@@ -907,6 +976,12 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			},
 			Key: alertRelabelConfigSecretKey,
 		}
+
+		// prometheus tls -- will be uncommented
+		// tlsConfig := r.prometheus.Spec.Web.TLSConfig
+		// tlsConfig.KeySecret.LocalObjectReference.Name = prometheusServiceSecretName
+		// tlsConfig.Cert.Secret.LocalObjectReference.Name = prometheusServiceSecretName
+		// tlsConfig.ClientCA.ConfigMap.LocalObjectReference.Name = servingCertCABundleConfigMapName
 
 		return nil
 	})
@@ -1110,6 +1185,7 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() err
 		var err error = nil
 		if auth, err = r.readGrafanaV1Secret(); err != nil {
 			if errors.IsNotFound(err) {
+				r.Log.Info("Unable to find v1 grafana-datasources secret")
 				auth, err = r.readGrafanaV2Secret()
 			}
 			if err != nil {
@@ -1617,15 +1693,11 @@ func (r *ManagedOCSReconciler) updateMCGCSV(csv *opv1a1.ClusterServiceVersion) e
 func (r *ManagedOCSReconciler) removeOLMComponents() error {
 
 	r.Log.Info("deleting deployer csv")
-	if csv, err := r.getCSVByPrefix(deployerCSVPrefix); err == nil {
-		if err := r.delete(csv); err != nil {
-			return fmt.Errorf("Unable to delete csv: %v", err)
-		} else {
-			r.Log.Info("Deployer csv removed successfully")
-			return nil
-		}
+	if err := r.deleteCSVByPrefix(deployerCSVPrefix); err != nil {
+		return fmt.Errorf("Unable to delete csv: %v", err)
 	} else {
-		return err
+		r.Log.Info("Deployer csv removed successfully")
+		return nil
 	}
 }
 
@@ -1658,10 +1730,10 @@ func (r *ManagedOCSReconciler) own(resource metav1.Object) error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServiceVersion, error) {
+func (r *ManagedOCSReconciler) deleteCSVByPrefix(name string) error {
 	csvList := opv1a1.ClusterServiceVersionList{}
 	if err := r.list(&csvList); err != nil {
-		return nil, fmt.Errorf("unable to list csv resources: %v", err)
+		return fmt.Errorf("unable to list csv resources: %v", err)
 	}
 
 	var csv *opv1a1.ClusterServiceVersion = nil
@@ -1672,7 +1744,14 @@ func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServi
 			break
 		}
 	}
-	return csv, nil
+
+	// There might be a chance that csv was deleted in previous reconcile, so
+	// check for it's existence before deleting
+	if csv != nil {
+		return r.delete(csv)
+	}
+
+	return nil
 }
 
 func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {

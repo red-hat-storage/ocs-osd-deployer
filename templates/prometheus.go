@@ -19,6 +19,7 @@ package templates
 import (
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -45,5 +46,24 @@ var PrometheusTemplate = promv1.Prometheus{
 			}},
 		},
 		Resources: utils.GetResourceRequirements("prometheus"),
+		// prometheus tls -- will be uncommented
+		// Web: &promv1.WebSpec{
+		// 	TLSConfig: &promv1.WebTLSConfig{
+		// 		KeySecret: corev1.SecretKeySelector{
+		// 			Key: "tls.key",
+		// 		},
+		// 		Cert: promv1.SecretOrConfigMap{
+		// 			Secret: &corev1.SecretKeySelector{
+		// 				Key: "tls.crt",
+		// 			},
+		// 		},
+		// 		ClientAuthType: fmt.Sprint(tls.VerifyClientCertIfGiven),
+		// 		ClientCA: promv1.SecretOrConfigMap{
+		// 			ConfigMap: &corev1.ConfigMapKeySelector{
+		// 				Key: "service-ca.crt",
+		// 			},
+		// 		},
+		// 	},
+		// },
 	},
 }
