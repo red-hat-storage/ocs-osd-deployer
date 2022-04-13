@@ -318,6 +318,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
+	rookOverrideConfigMapTemplate := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      rookOverrideConfigMapName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -731,6 +737,8 @@ var _ = Describe("ManagedOCS controller", func() {
 					if testReconciler.DeploymentType == providerDeploymentType {
 						By("Creating a onboarding validation key secret resource")
 						utils.WaitForResource(k8sClient, ctx, onboardingValidationKeySecretTemplate.DeepCopy(), timeout, interval)
+						By("Creating a rook-config-override config map resource")
+						utils.WaitForResource(k8sClient, ctx, rookOverrideConfigMapTemplate.DeepCopy(), timeout, interval)
 					}
 
 					By("Creating a storagecluster resource")
@@ -775,6 +783,20 @@ var _ = Describe("ManagedOCS controller", func() {
 					secret := onboardingValidationKeySecretTemplate.DeepCopy()
 					utils.WaitForResource(k8sClient, ctx, secret, timeout, interval)
 					Expect(secret.Data["key"]).Should(Equal([]byte("-----BEGIN PUBLIC KEY-----\ntest-validation-key\n-----END PUBLIC KEY-----")))
+				})
+			})
+			When("it is a provider deployment", func() {
+				It("should have rook-config-override configmap settings", func() {
+					if testReconciler.DeploymentType != providerDeploymentType {
+						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
+					}
+					configMap := rookOverrideConfigMapTemplate.DeepCopy()
+					utils.WaitForResource(k8sClient, ctx, configMap, timeout, interval)
+					Expect(configMap.Data["config"]).Should(Equal("" +
+						"[global]\n" +
+						"osd_pool_pg_autoscale_mode = off\n" +
+						"osd_pool_default_pg_num = 128\n" +
+						"osd_pool_default_pgp_num = 128\n"))
 				})
 			})
 			When("size is increased in the add-on parameters secret", func() {

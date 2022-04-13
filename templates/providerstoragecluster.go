@@ -95,6 +95,9 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 			CephFilesystems: ocsv1.ManageCephFilesystems{
 				DisableStorageClass: false,
 			},
+			CephConfig: ocsv1.ManageCephConfig{
+				ReconcileStrategy: "ignore",
+			},
 		},
 	},
 }

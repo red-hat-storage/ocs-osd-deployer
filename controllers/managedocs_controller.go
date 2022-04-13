@@ -110,6 +110,7 @@ const (
 	providerDeploymentType                 = "provider"
 	servingCertCABundleConfigMapName       = "prometheus-serving-cert-ca-bundle"
 	prometheusServiceSecretName            = "managed-ocs-prometheus-service-secret"
+	rookOverrideConfigMapName              = "rook-config-override"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -153,6 +154,7 @@ type ManagedOCSReconciler struct {
 	addonParams                        map[string]string
 	onboardingValidationKeySecret      *corev1.Secret
 	servingCertCaBundleConfigMap       *corev1.ConfigMap
+	rookConfigOverride                 *corev1.ConfigMap
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -433,6 +435,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.onboardingValidationKeySecret = &corev1.Secret{}
 	r.onboardingValidationKeySecret.Name = onboardingValidationKeySecretName
 	r.onboardingValidationKeySecret.Namespace = r.namespace
+
+	r.rookConfigOverride = &corev1.ConfigMap{}
+	r.rookConfigOverride.Name = rookOverrideConfigMapName
+	r.rookConfigOverride.Namespace = r.namespace
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -512,6 +518,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		}
 		// Reconciles only for provider deployment type
 		if err := r.reconcileOnboardingValidationSecret(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileRookOverrideConfig(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileStorageCluster(); err != nil {
@@ -1785,4 +1794,30 @@ func (r *ManagedOCSReconciler) setDeviceSetCount(deviceSet *ocsv1.StorageDeviceS
 		r.Log.V(-1).Info("Requested storage device set count will result in downscaling, which is not supported. Skipping")
 		deviceSet.Count = currDeviceSetCount
 	}
+}
+
+func (r *ManagedOCSReconciler) reconcileRookOverrideConfig() error {
+	if r.DeploymentType != providerDeploymentType {
+		r.Log.Info("Non provider deployment, skipping reconcile for rook override config")
+		return nil
+	}
+	r.Log.Info("Reconciling Rook Override Config Map")
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.rookConfigOverride, func() error {
+		if err := r.own(r.rookConfigOverride); err != nil {
+			return err
+		}
+
+		r.rookConfigOverride.Data = map[string]string{
+			"config": "" +
+				"[global]\n" +
+				"osd_pool_pg_autoscale_mode = off\n" +
+				"osd_pool_default_pg_num = 128\n" +
+				"osd_pool_default_pgp_num = 128\n",
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to create Rook Override Config Map")
+	}
+	return nil
 }
