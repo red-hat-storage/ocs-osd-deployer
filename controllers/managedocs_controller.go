@@ -266,7 +266,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
 		Owns(&corev1.Secret{}).
-		Owns(&corev1.Service{}).
+		// prometheus tls -- will be uncommented
+		// Owns(&corev1.Service{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -523,12 +524,13 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileAlertRelabelConfigSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcilePrometheusService(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileServingCertCABundleConfigMap(); err != nil {
-			return ctrl.Result{}, err
-		}
+		// prometheus tls -- will be uncommented
+		// if err := r.reconcilePrometheusService(); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
+		// if err := r.reconcileServingCertCABundleConfigMap(); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
 		if err := r.reconcilePrometheus(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -913,7 +915,7 @@ func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 
 // reconcilePrometheusService function wait for prometheus Service
 // to start and sets appropriate annotation for 'service-ca' controller
-func (r *ManagedOCSReconciler) reconcilePrometheusService() error {
+func (r *ManagedOCSReconciler) reconcilePrometheusService() error { //nolint:deadcode,unused
 	r.Log.Info("Reconciling prometheusService")
 
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.prometheusService, func() error {
@@ -941,7 +943,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheusService() error {
 	return err
 }
 
-func (r *ManagedOCSReconciler) reconcileServingCertCABundleConfigMap() error {
+func (r *ManagedOCSReconciler) reconcileServingCertCABundleConfigMap() error { //nolint:deadcode,unused
 	r.Log.Info("Reconciling servingCertCABundleConfigMap")
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.servingCertCaBundleConfigMap, func() error {
 		if err := r.own(r.servingCertCaBundleConfigMap); err != nil {
@@ -975,10 +977,11 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			Key: alertRelabelConfigSecretKey,
 		}
 
-		tlsConfig := r.prometheus.Spec.Web.TLSConfig
-		tlsConfig.KeySecret.LocalObjectReference.Name = prometheusServiceSecretName
-		tlsConfig.Cert.Secret.LocalObjectReference.Name = prometheusServiceSecretName
-		tlsConfig.ClientCA.ConfigMap.LocalObjectReference.Name = servingCertCABundleConfigMapName
+		// prometheus tls -- will be uncommented
+		// tlsConfig := r.prometheus.Spec.Web.TLSConfig
+		// tlsConfig.KeySecret.LocalObjectReference.Name = prometheusServiceSecretName
+		// tlsConfig.Cert.Secret.LocalObjectReference.Name = prometheusServiceSecretName
+		// tlsConfig.ClientCA.ConfigMap.LocalObjectReference.Name = servingCertCABundleConfigMapName
 
 		return nil
 	})
