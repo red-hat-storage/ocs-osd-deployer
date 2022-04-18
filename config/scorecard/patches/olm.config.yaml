@@ -6,7 +6,6 @@
     - olm-bundle-validation
     image: quay.io/operator-framework/scorecard-test:v1.2.0
     labels:
-      phase: msp-main
       suite: olm
       test: olm-bundle-validation-test
 - op: add
@@ -17,7 +16,6 @@
     - olm-crds-have-validation
     image: quay.io/operator-framework/scorecard-test:v1.2.0
     labels:
-      phase: msp-main
       suite: olm
       test: olm-crds-have-validation-test
 - op: add
@@ -28,7 +26,6 @@
     - olm-crds-have-resources
     image: quay.io/operator-framework/scorecard-test:v1.2.0
     labels:
-      phase: msp-main
       suite: olm
       test: olm-crds-have-resources-test
 - op: add
@@ -39,7 +36,6 @@
     - olm-spec-descriptors
     image: quay.io/operator-framework/scorecard-test:v1.2.0
     labels:
-      phase: msp-main
       suite: olm
       test: olm-spec-descriptors-test
 - op: add
@@ -50,6 +46,5 @@
     - olm-status-descriptors
     image: quay.io/operator-framework/scorecard-test:v1.2.0
     labels:
-      phase: msp-main
       suite: olm
       test: olm-status-descriptors-test

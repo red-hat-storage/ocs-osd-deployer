@@ -6,6 +6,5 @@
     - basic-check-spec
     image: quay.io/operator-framework/scorecard-test:v1.2.0
     labels:
-      phase: msp-main
       suite: basic
       test: basic-check-spec-test
