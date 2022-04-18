@@ -38,6 +38,11 @@
                 {{ end }}
             {{ end }}
         {{ end }}
+
+        {{if eq .Name "persistentvolumeclaim" }}
+            Name of PVC: {{ .Value }} 
+        {{ end }}
+        
         </strong>
         <br>
         If you have any questions, please <a clicktracking=off href="https://access.redhat.com/support/contact/technicalSupport/">contact us</a>. Review the <a clicktracking=off href="https://access.redhat.com/support/policy/support_process">support process</a> for guidance on working with Red Hat support.
