@@ -82,7 +82,7 @@ var K8sMetricsServiceMonitorTemplate = promv1.ServiceMonitor{
 		},
 		Selector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"prometheus": "k8s",
+				"app.kubernetes.io/component": "prometheus",
 			},
 		},
 	},

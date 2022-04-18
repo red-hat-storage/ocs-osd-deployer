@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -27,6 +29,7 @@ import (
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
+	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -45,10 +48,14 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var cfg *rest.Config
-var k8sClient client.Client
-var testEnv *envtest.Environment
-var testReconciler *ManagedOCSReconciler
+var (
+	cfg            *rest.Config
+	k8sClient      client.Client
+	testEnv        *envtest.Environment
+	testReconciler *ManagedOCSReconciler
+	ctx            context.Context
+	cancel         context.CancelFunc
+)
 
 const (
 	testPrimaryNamespace                       = "primary"
@@ -74,15 +81,30 @@ func TestAPIs(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	done := make(chan interface{})
-	go func() {
 
+	// write logs from reconciler to a log file
+	var logFile io.Writer
+	logFile, err := os.Create("/tmp/ocs-osd-deployer.log")
+	Expect(err).ToNot(HaveOccurred())
+
+	go func(logFile io.Writer) {
+
+		GinkgoWriter.TeeTo(logFile)
 		logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+		ctx, cancel = context.WithCancel(context.Background())
 
 		By("bootstrapping test environment")
 		testEnv = &envtest.Environment{
 			CRDDirectoryPaths: []string{
 				filepath.Join("..", "config", "crd", "bases"),
 				filepath.Join("..", "shim", "crds"),
+			},
+			// when tests are re-run even if CRDs are updated, testEnv will only check
+			// for CRD existence and so it's better to delete those from etcd after
+			// testEnv cleanup
+			CRDInstallOptions: envtest.CRDInstallOptions{
+				CleanUpAfterUse: true,
 			},
 		}
 
@@ -109,7 +131,15 @@ var _ = BeforeSuite(func() {
 		err = openshiftv1.AddToScheme(scheme.Scheme)
 		Expect(err).NotTo(HaveOccurred())
 
+		err = odfv1a1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
 		// +kubebuilder:scaffold:scheme
+
+		// Client to be use by the test code, using a non cached client
+		k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(k8sClient).ToNot(BeNil())
 
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
@@ -118,9 +148,9 @@ var _ = BeforeSuite(func() {
 
 		testReconciler = &ManagedOCSReconciler{
 			Client:                       k8sManager.GetClient(),
-			UnrestrictedClient:           k8sManager.GetClient(),
+			UnrestrictedClient:           k8sClient,
 			Log:                          ctrl.Log.WithName("controllers").WithName("ManagedOCS"),
-			Scheme:                       scheme.Scheme,
+			Scheme:                       k8sManager.GetScheme(),
 			AddonParamSecretName:         testAddonParamsSecretName,
 			AddonConfigMapName:           testAddonConfigMapName,
 			AddonConfigMapDeleteLabelKey: testAddonConfigMapDeleteLabelKey,
@@ -134,16 +164,10 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		go func() {
-			err = k8sManager.Start(ctrl.SetupSignalHandler())
-			Expect(err).ToNot(HaveOccurred())
+			defer GinkgoRecover()
+			err = k8sManager.Start(ctx)
+			Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 		}()
-
-		// Client to be use by the test code, using a non cached client
-		k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-		Expect(err).ToNot(HaveOccurred())
-		Expect(k8sClient).ToNot(BeNil())
-
-		ctx := context.Background()
 
 		// Create the primary namespace to be used by some of the tests
 		primaryNS := &corev1.Namespace{}
@@ -177,14 +201,16 @@ var _ = BeforeSuite(func() {
 		Expect(k8sClient.Create(ctx, rookConfigMap)).ShouldNot(HaveOccurred())
 
 		close(done)
-	}()
+	}(logFile)
 	Eventually(done, 60).Should(BeClosed())
 })
 
 var _ = AfterSuite(func() {
+	cancel()
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
+	GinkgoWriter.ClearTeeWriters()
 })
 
 func getMockOCSCSVDeploymentSpec() []opv1a1.StrategyDeploymentSpec {
