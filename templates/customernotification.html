@@ -23,10 +23,10 @@
                             The utilization of an OSD in your cluster has exceeded 80%. Please free up some space immediately or expand the storage cluster if possible. Failure to address this issue will lead to service interruptions for the cluster.
                         {{ end }}
                         {{ if eq .Value "PersistentVolumeUsageNearFull" }}
-                            The utilization of the PVC - {{ $labels.persistentvolumeclaim }} in your cluster has exceeded 75%. Please free up some space or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                            The utilization of the PVC in your cluster has exceeded 75%. Please free up some space or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
                         {{ end }}
                         {{ if eq .Value "PersistentVolumeUsageCritical" }}
-                            The utilization of the PVC - {{ $labels.persistentvolumeclaim }} in your cluster has exceeded 85%. Please free up some space immediately or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                            The utilization of the PVC in your cluster has exceeded 85%. Please free up some space immediately or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
                         {{ end }}
                         {{ if eq .Value "CephClusterReadOnly" }}
                             Your storage cluster utilization has crossed 85% and will become read-only now! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
