@@ -17,7 +17,7 @@
             {{ range .Labels.SortedPairs }}
                 {{ if eq .Name "alertname" }}
                         {{ if and (eq .Value "CephClusterCriticallyFull" ) (eq $FirstTimeError true ) }}
-                            Your Ceph Cluster is Critically Full
+                            Ceph Cluster is Critically Full
                             <br>
                             Your storage cluster utilization has crossed 80% and will become read-only at 85% utilized! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues. It is common to also be alerted to OSD devices entering near-full or full states prior to this alert.
                             
