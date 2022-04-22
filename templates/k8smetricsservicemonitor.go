@@ -24,6 +24,8 @@ var params = map[string][]string{
 		"{__name__='kube_persistentvolume_info'}",
 		"{__name__='kube_storageclass_info'}",
 		"{__name__='kube_persistentvolumeclaim_info'}",
+		"{__name__='kube_deployment_spec_replicas'}",
+		"{__name__='kube_pod_status_phase'}",
 		"{__name__='kubelet_volume_stats_capacity_bytes'}",
 		"{__name__='kubelet_volume_stats_used_bytes'}",
 		"{__name__='node_disk_read_time_seconds_total'}",
@@ -45,14 +47,19 @@ var K8sMetricsServiceMonitorTemplate = promv1.ServiceMonitor{
 				ScrapeTimeout: "1m",
 				Interval:      "2m",
 				HonorLabels:   true,
-				MetricRelabelConfigs: []*promv1.RelabelConfig{
+				RelabelConfigs: []*promv1.RelabelConfig{
 					{
 						Action: "labeldrop",
 						Regex:  "prometheus_replica",
 					},
 					{
-						Action: "labeldrop",
-						Regex:  "pod",
+						Action:      "replace",
+						Regex:       "prometheus-k8s-.*",
+						Replacement: "",
+						SourceLabels: []string{
+							"pod",
+						},
+						TargetLabel: "pod",
 					},
 				},
 				TLSConfig: &promv1.TLSConfig{
