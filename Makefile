@@ -83,7 +83,7 @@ endif
 # ===== Make targets ===== #
 
 .PHONY: all
-all: manager readinessServer
+all: manager readinessServer awsDataGather
 
 ##@ General
 
@@ -145,6 +145,10 @@ manager: generate fmt vet ## Build manager binary.
 readinessServer: fmt vet ## Build readiness probe binary.
 	go build -o bin/readinessServer readinessProbe/main.go
 
+.PHONY: awsDataGather
+awsDataGather: cmd/awsDataGather/main.go pkg/aws/gather.go
+	go build -o bin/awsDataGather cmd/awsDataGather/main.go
+
 .PHONY: export_env_vars
 export_env_vars:
 export NAMESPACE = openshift-storage
@@ -155,6 +159,7 @@ export DEPLOYMENT_TYPE = converged
 export RHOBS_ENDPOINT = test
 export RH_SSO_TOKEN_ENDPOINT = test
 
+<<<<<<< HEAD
 .PHONY: run
 run: generate fmt vet manifests export_env_vars ## Run a controller from your host.
 	kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
@@ -208,7 +213,7 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle \
 		-q \
-		--extra-service-accounts prometheus-k8s \
+		--extra-service-accounts prometheus-k8s,aws-data-gather \
 		--overwrite \
 		--version $(VERSION) \
 		$(BUNDLE_METADATA_OPTS) \

@@ -57,6 +57,7 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v1alpha1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
+	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	netv1 "k8s.io/api/networking/v1"
@@ -206,6 +207,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 						return true
 					}
 				} else if name == rookConfigMapName {
+					return true
+				} else if name == aws.DataConfigMapName {
 					return true
 				}
 				return false
@@ -523,6 +526,22 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.addonParams[storageUnitKey] = "Ti"
 		}
 
+		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileEgressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		// Reconcile the different resources
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
@@ -565,21 +584,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSInitialization(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileEgressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -1461,16 +1465,42 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
-	// Fix for non-converged deployment type will be provided in upcoming PR
-	if r.DeploymentType != convergedDeploymentType {
-		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
-		return nil
-	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
 		if err := r.own(r.egressNetworkPolicy); err != nil {
 			return err
 		}
 		desired := templates.EgressNetworkPolicyTemplate.DeepCopy()
+
+		if r.DeploymentType != convergedDeploymentType {
+			// Get the aws config map
+			awsConfigMap := corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      aws.DataConfigMapName,
+					Namespace: r.namespace,
+				},
+			}
+			if err := r.get(&awsConfigMap); err != nil {
+				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
+			}
+
+			// Get the machine cidr
+			vpcCIDR, ok := awsConfigMap.Data[aws.CidrKey]
+			if !ok {
+				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
+			}
+			// Allow egress traffic to that cidr range
+			vpcEgressRule := openshiftv1.EgressNetworkPolicyRule{
+				Type: openshiftv1.EgressNetworkPolicyRuleAllow,
+				To: openshiftv1.EgressNetworkPolicyPeer{
+					CIDRSelector: vpcCIDR,
+				},
+			}
+
+			desired.Spec.Egress = append(
+				[]openshiftv1.EgressNetworkPolicyRule{
+					vpcEgressRule,
+				}, desired.Spec.Egress...)
+		}
 
 		if r.deadMansSnitchSecret.UID == "" {
 			if err := r.get(r.deadMansSnitchSecret); err != nil {
@@ -1484,6 +1514,9 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
 		if err != nil {
 			return fmt.Errorf("Unable to parse DMS url: %v", err)
+		}
+		if snitchURL.Hostname() == "" {
+			return fmt.Errorf("DMS snitch url %q does not have a valid hostname", snitchURL)
 		}
 
 		if r.smtpSecret.UID == "" {
