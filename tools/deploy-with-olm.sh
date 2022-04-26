@@ -46,6 +46,7 @@ ALERT_SMTP_FROM_ADDR=${ALERT_SMTP_FROM_ADDR:-noreply-test@email.com}
 BUNDLE_FILE=${OUTPUT_DIR}/manifests/ocs-osd-deployer.clusterserviceversion.yaml
 CLUSTER_SIZE=${CLUSTER_SIZE:-1}
 ENABLE_MCG_FLAG=${ENABLE_MCG_FLAG:-false}
+SNITCH_URL=${SNITCH_URL:-https://nosnch.in/fake_url}
 
 #SMTP config variables
 [ -z "$NOTIFICATION_EMAIL" ] || NOTIFICATION_EMAIL_OPT="--from-literal notification-email-0=${NOTIFICATION_EMAIL}"

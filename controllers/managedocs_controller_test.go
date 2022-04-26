@@ -492,7 +492,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		}
 		if shouldDMSSecretExist {
 			if hasSnitchUrl {
-				dmsSecret.Data["SNITCH_URL"] = []byte("test-url")
+				dmsSecret.Data["SNITCH_URL"] = []byte("https://nosnch.in/fake_url")
 			} else {
 				dmsSecret.Data["SNITCH_URL"] = []byte("")
 			}

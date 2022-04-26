@@ -207,6 +207,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 					}
 				} else if name == rookConfigMapName {
 					return true
+				} else if name == utils.IMDSConfigMapName {
+					return true
 				}
 				return false
 			},
@@ -1367,27 +1369,27 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 		cloneRookConfigMap.Data["ROOK_CSI_ENABLE_RBD"] = "false"
 	} else {
 		cloneRookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-provisioner",
 				Resource: utils.GetResourceRequirements("csi-provisioner"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-resizer",
 				Resource: utils.GetResourceRequirements("csi-resizer"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-attacher",
 				Resource: utils.GetResourceRequirements("csi-attacher"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-snapshotter",
 				Resource: utils.GetResourceRequirements("csi-snapshotter"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-rbdplugin",
 				Resource: utils.GetResourceRequirements("csi-rbdplugin"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "liveness-prometheus",
 				Resource: utils.GetResourceRequirements("liveness-prometheus"),
 			},
@@ -1461,16 +1463,45 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
-	// Fix for non-converged deployment type will be provided in upcoming PR
-	if r.DeploymentType != convergedDeploymentType {
-		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
-		return nil
-	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
 		if err := r.own(r.egressNetworkPolicy); err != nil {
 			return err
 		}
 		desired := templates.EgressNetworkPolicyTemplate.DeepCopy()
+
+		if r.DeploymentType != convergedDeploymentType {
+			// Get the aws config map
+			awsConfigMap := &corev1.ConfigMap{}
+			awsConfigMap.Name = utils.IMDSConfigMapName
+			awsConfigMap.Namespace = r.namespace
+			if err := r.get(awsConfigMap); err != nil {
+				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
+			}
+
+			// Get the machine cidr
+			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
+			if !ok {
+				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
+			}
+			// Allow egress traffic to that cidr range
+			vpcEgressRule := openshiftv1.EgressNetworkPolicyRule{
+				Type: openshiftv1.EgressNetworkPolicyRuleAllow,
+				To: openshiftv1.EgressNetworkPolicyPeer{
+					CIDRSelector: vpcCIDR,
+				},
+			}
+
+			// Inserting the VPC Egress rule in front of all other egress rules.
+			// The order or rules matter
+			// https://docs.openshift.com/container-platform/4.10/networking/openshift_sdn/configuring-egress-firewall.html#policy-rule-order_openshift-sdn-egress-firewall
+			// Inserting this rule in the front ensures it comes before the EgressNetworkPolicyRuleDeny rule.
+			desired.Spec.Egress = append(
+				[]openshiftv1.EgressNetworkPolicyRule{
+					vpcEgressRule,
+				},
+				desired.Spec.Egress...,
+			)
+		}
 
 		if r.deadMansSnitchSecret.UID == "" {
 			if err := r.get(r.deadMansSnitchSecret); err != nil {
@@ -1484,6 +1515,9 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
 		if err != nil {
 			return fmt.Errorf("Unable to parse DMS url: %v", err)
+		}
+		if snitchURL.Hostname() == "" {
+			return fmt.Errorf("DMS snitch url %q does not have a valid hostname", snitchURL)
 		}
 
 		if r.smtpSecret.UID == "" {

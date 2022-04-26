@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-data-gather
+spec:
+  selector:
+    matchLabels:
+      name: aws-data-gather
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: aws-data-gather
+    spec:
+      containers:
+      - command:
+        - /awsDataGather
+        image: controller:latest
+        name: aws-data-gather
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      serviceAccountName: aws-data-gather
+      hostNetwork: true
