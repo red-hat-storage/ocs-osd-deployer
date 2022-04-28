@@ -111,7 +111,7 @@ require (
 replace (
 	github.com/go-logr/logr => github.com/go-logr/logr v0.4.0
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v0.20.4-openstorage-rc3
-	github.com/openshift/api => github.com/openshift/api v0.0.0-20201203102015-275406142edb // required for Quickstart CRD
+	github.com/openshift/api => github.com/openshift/api v0.0.0-20220112144624-6db10b227818 // required for Quickstart CRD
 	github.com/operator-framework/api => github.com/operator-framework/api v0.1.1
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20190424153033-d3245f150225
 	k8s.io/api => k8s.io/api v0.21.3
