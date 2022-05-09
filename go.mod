@@ -3,27 +3,28 @@ module github.com/red-hat-storage/ocs-osd-deployer
 go 1.16
 
 require (
-	github.com/go-logr/logr v0.4.0
+	github.com/go-logr/logr v1.2.0
 	github.com/go-openapi/spec v0.20.3 // indirect
 	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/onsi/ginkgo/v2 v2.1.3
 	github.com/onsi/gomega v1.17.0
 	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
 	github.com/operator-framework/api v0.10.0
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.49.0
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.53.1
 	github.com/red-hat-data-services/odf-operator v0.0.0-20220210164358-c9fa5821600f
 	github.com/red-hat-storage/ocs-operator v0.0.1-master.0.20220204091141-8b4aa12ac5a9
 	github.com/rook/rook v1.8.3
 	go.uber.org/zap v1.19.0
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.22.2
-	k8s.io/apiextensions-apiserver v0.22.2
-	k8s.io/apimachinery v0.22.2
+	k8s.io/api v0.23.0
+	k8s.io/apiextensions-apiserver v0.23.0
+	k8s.io/apimachinery v0.23.0
 	k8s.io/client-go v12.0.0+incompatible
 	sigs.k8s.io/controller-runtime v0.10.2
 )
 
 replace (
+	github.com/go-logr/logr => github.com/go-logr/logr v0.4.0
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v0.20.4-openstorage-rc3
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20201203102015-275406142edb // required for Quickstart CRD
 	github.com/operator-framework/api => github.com/operator-framework/api v0.1.1
@@ -42,6 +43,7 @@ replace (
 	k8s.io/controller-manager => k8s.io/controller-manager v0.21.3
 	k8s.io/cri-api => k8s.io/cri-api v0.21.3
 	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.21.3
+	k8s.io/klog/v2 => k8s.io/klog/v2 v2.8.0
 	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.21.3
 	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.21.3
 	k8s.io/kube-proxy => k8s.io/kube-proxy v0.21.3
