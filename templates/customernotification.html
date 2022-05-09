@@ -11,65 +11,65 @@
         <br><br>
         <strong>
 
-        {{ $FirstTimeError := true }}
+        {{ $FirstAlert := true }}
 
         {{ range .Alerts.Firing }}
             {{ range .Labels.SortedPairs }}
                 {{ if eq .Name "alertname" }}
-                        {{ if and (eq .Value "CephClusterCriticallyFull" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "CephClusterCriticallyFull" ) (eq $FirstAlert true ) }}
                             Ceph Cluster is Critically Full
-                            <br>
+                            <br><br>
                             Your storage cluster utilization has crossed 80% and will become read-only at 85% utilized! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues. It is common to also be alerted to OSD devices entering near-full or full states prior to this alert.
                             
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if and (eq .Value "CephOSDNearFull" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "CephOSDNearFull" ) (eq $FirstAlert true ) }}
                             Ceph OSD is Nearly Full
-                            <br>
+                            <br><br>
                             The utilization of an OSD in your cluster has exceeded 75%. Please free up some space or expand the storage cluster if possible. If the OSD reaches 85% utilization it will enter a read-only state and service interruptions are possible.
                             
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if and (eq .Value "CephOSDCriticallyFull" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "CephOSDCriticallyFull" ) (eq $FirstAlert true ) }}
                             Ceph OSD is Critically Full
-                            <br>
+                            <br><br>
                             The utilization of an OSD in your cluster has exceeded 80%. Please free up some space immediately or expand the storage cluster if possible. Failure to address this issue will lead to service interruptions for the cluster.
                             
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if and (eq .Value "PersistentVolumeUsageNearFull" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "PersistentVolumeUsageNearFull" ) (eq $FirstAlert true ) }}
                             Persistent Volume Usage is Nearly Full
-                            <br>
-                            The utilization of the PVC in your cluster has exceeded 75%. Please free up some space or expand the PVC if possible. Failure to address this issue may lead to service interruptions for the cluster.
+                            <br><br>
+                            The utilization of one of the PVs in your cluster has exceeded 75%. Please free up some space or expand the PV if possible. Failure to address this issue may lead to service interruptions for the cluster.
                             
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if and (eq .Value "PersistentVolumeUsageCritical" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "PersistentVolumeUsageCritical" ) (eq $FirstAlert true ) }}
                             Persistent Volume Usage Critical
-                            <br>
-                            The utilization of the PVC in your cluster has exceeded 85%. Please free up some space immediately or expand the PVC if possible. Failure to address this issue may lead to service interruptions for the cluster.
+                            <br><br>
+                            The utilization of one of the PVs in your cluster has exceeded 85%. Please free up some space immediately or expand the PV if possible. Failure to address this issue may lead to service interruptions for the cluster.
                             
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if and (eq .Value "CephClusterReadOnly" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "CephClusterReadOnly" ) (eq $FirstAlert true ) }}
                             Ceph Cluster is in Read Only state
-                            <br>
+                            <br><br>
                             Your storage cluster utilization has crossed 85% and will become read-only now! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
                             
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if and (eq .Value "CephClusterNearFull" ) (eq $FirstTimeError true ) }}
+                        {{ if and (eq .Value "CephClusterNearFull" ) (eq $FirstAlert true ) }}
                             Ceph Cluster is Nearly Full
-                            <br>
+                            <br><br>
                             Your storage cluster utilization has crossed 75% and will become read-only at 85%. Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
 
-                            {{ $FirstTimeError = false }}
+                            {{ $FirstAlert = false }}
                         {{ end }}
                         <br>
                 {{ end }}
                 <ul>
                     {{if eq .Name "persistentvolumeclaim" }}
-                        <li>Name of PVC: {{ .Value }}</li>
+                        <li>PVC Name: {{ .Value }}</li>
                     {{ end }}
                     {{if eq .Name "namespace" }}
                         <li>Namespace: {{ .Value }}</li>

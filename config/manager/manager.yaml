@@ -44,9 +44,12 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: ADDON_NAME
+          value: ocs-converged
         - name: SOP_ENDPOINT
         - name: ALERT_SMTP_FROM_ADDR
+          value: noreply-test@rhmw.io
         - name: DEPLOYMENT_TYPE
+          value: converged
       - name: readiness-server
         command:
         - /readinessServer
