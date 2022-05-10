@@ -10,41 +10,76 @@
         This notification is for your OpenShift managed cluster running OpenShift Data Foundation.
         <br><br>
         <strong>
+
+        {{ $FirstAlert := true }}
+
         {{ range .Alerts.Firing }}
             {{ range .Labels.SortedPairs }}
                 {{ if eq .Name "alertname" }}
-                        {{ if eq .Value "CephClusterCriticallyFull" }}
-                            Your storage cluster utilization has crossed 80% and will become read-only at 85% utilized! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues. It is common to also be alerted to OSD devices entering near-full or full states prior to this alert.
+                        {{ if and (eq .Value "CephClusterCriticallyFull" ) (eq $FirstAlert true ) }}
+                            Ceph Cluster is Critically Full
+                            <br><br>
+                            Your storage cluster utilization has crossed 80% and will move into a read-only state at 85%! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues. It is common to be alerted about OSD devices entering near-full or full states prior to this alert.
+                            
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if eq .Value "CephOSDNearFull" }}
-                            The utilization of an OSD in your cluster has exceeded 75%. Please free up some space or expand the storage cluster if possible. If the OSD reaches 85% utilization it will enter a read-only state and service interruptions are possible.
+                        {{ if and (eq .Value "CephOSDNearFull" ) (eq $FirstAlert true ) }}
+                            Ceph OSD is Nearly Full
+                            <br><br>
+                            The utilization of an OSD in your cluster has exceeded 75%. Please free up some space or expand the storage cluster if possible. If an OSD reaches 85% utilization it will enter a read-only state and service interruptions are possible.
+                            
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if eq .Value "CephOSDCriticallyFull" }}
-                            The utilization of an OSD in your cluster has exceeded 80%. Please free up some space immediately or expand the storage cluster if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                        {{ if and (eq .Value "CephOSDCriticallyFull" ) (eq $FirstAlert true ) }}
+                            Ceph OSD is Critically Full
+                            <br><br>
+                            The utilization of an OSD in your cluster has exceeded 80%. Please free up some space immediately or expand the storage cluster if possible. Failure to address this issue will lead to service interruptions.
+                            
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if eq .Value "PersistentVolumeUsageNearFull" }}
-                            The utilization of the PVC in your cluster has exceeded 75%. Please free up some space or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                        {{ if and (eq .Value "PersistentVolumeUsageNearFull" ) (eq $FirstAlert true ) }}
+                            Persistent Volume Usage is Nearly Full
+                            <br><br>
+                            The utilization of one or more of the PVs in your cluster has exceeded 75%. Please free up some space or expand the PV if possible. Failure to address this issue may lead to service interruptions.
+                            
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if eq .Value "PersistentVolumeUsageCritical" }}
-                            The utilization of the PVC in your cluster has exceeded 85%. Please free up some space immediately or expand the PVC if possible. Failure to address this issue will lead to service interruptions for the cluster.
+                        {{ if and (eq .Value "PersistentVolumeUsageCritical" ) (eq $FirstAlert true ) }}
+                            Persistent Volume Usage Critical
+                            <br><br>
+                            The utilization of one or more of the PVs in your cluster has exceeded 85%. Please free up some space immediately or expand the PV if possible. Failure to address this issue may lead to service interruptions.
+                            
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if eq .Value "CephClusterReadOnly" }}
-                            Your storage cluster utilization has crossed 85% and will become read-only now! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
+                        {{ if and (eq .Value "CephClusterReadOnly" ) (eq $FirstAlert true ) }}
+                            Ceph Cluster is in Read Only state
+                            <br><br>
+                            Your storage cluster utilization has crossed 85%, as a result, access is now in a read-only state! Please free up some space or if possible expand the storage cluster immediately to prevent any additional service access issues.
+                            
+                            {{ $FirstAlert = false }}
                         {{ end }}
-                        {{ if eq .Value "CephClusterNearFull" }}
-                            Your storage cluster utilization has crossed 75% and will become read-only at 85%. Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
+                        {{ if and (eq .Value "CephClusterNearFull" ) (eq $FirstAlert true ) }}
+                            Ceph Cluster is Nearly Full
+                            <br><br>
+                            Your storage cluster utilization has crossed 75% and will move into a read-only state at 85%. Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
+
+                            {{ $FirstAlert = false }}
                         {{ end }}
                         <br>
                 {{ end }}
+                <ul>
+                    {{if eq .Name "persistentvolumeclaim" }}
+                        <li>PVC Name: {{ .Value }}</li>
+                    {{ end }}
+                    {{if eq .Name "namespace" }}
+                        <li>Namespace: {{ .Value }}</li>
+                    {{ end }}
+                </ul>
             {{ end }}
         {{ end }}
-
-        {{if eq .Name "persistentvolumeclaim" }}
-            Name of PVC: {{ .Value }} 
-        {{ end }}
-        
         </strong>
         <br>
+        
         If you have any questions, please <a clicktracking=off href="https://access.redhat.com/support/contact/technicalSupport/">contact us</a>. Review the <a clicktracking=off href="https://access.redhat.com/support/policy/support_process">support process</a> for guidance on working with Red Hat support.
         <br><br>
         Thank you for choosing Red Hat OpenShift Data Foundation,
