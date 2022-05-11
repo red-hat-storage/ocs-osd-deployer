@@ -17,8 +17,11 @@ limitations under the License.
 package templates
 
 import (
+	"fmt"
+
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
+	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -30,6 +33,12 @@ var resourceSelector = metav1.LabelSelector{
 		"app": "managed-ocs",
 	},
 }
+
+var (
+	KubeRBACProxyPortNumber             int    = 9339
+	PrometheusServingCertSecretName     string = "prometheus-serving-cert-secret"
+	PrometheusKubeRBACPoxyConfigMapName string = "prometheus-kube-rbac-proxy-config"
+)
 
 var PrometheusTemplate = promv1.Prometheus{
 	Spec: promv1.PrometheusSpec{
@@ -45,25 +54,54 @@ var PrometheusTemplate = promv1.Prometheus{
 				Port:      intstr.FromString("web"),
 			}},
 		},
-		Resources: utils.GetResourceRequirements("prometheus"),
-		// prometheus tls -- will be uncommented
-		// Web: &promv1.WebSpec{
-		// 	TLSConfig: &promv1.WebTLSConfig{
-		// 		KeySecret: corev1.SecretKeySelector{
-		// 			Key: "tls.key",
-		// 		},
-		// 		Cert: promv1.SecretOrConfigMap{
-		// 			Secret: &corev1.SecretKeySelector{
-		// 				Key: "tls.crt",
-		// 			},
-		// 		},
-		// 		ClientAuthType: fmt.Sprint(tls.VerifyClientCertIfGiven),
-		// 		ClientCA: promv1.SecretOrConfigMap{
-		// 			ConfigMap: &corev1.ConfigMapKeySelector{
-		// 				Key: "service-ca.crt",
-		// 			},
-		// 		},
-		// 	},
-		// },
+		Resources:   utils.GetResourceRequirements("prometheus"),
+		ListenLocal: true,
+		Containers: []corev1.Container{{
+			Name: "kube-rbac-proxy",
+			Args: []string{
+				fmt.Sprintf("--secure-listen-address=0.0.0.0:%d", KubeRBACProxyPortNumber),
+				"--upstream=http://127.0.0.1:9090/",
+				"--logtostderr=true",
+				"--v=10",
+				"--tls-cert-file=/etc/tls-secret/tls.crt",
+				"--tls-private-key-file=/etc/tls-secret/tls.key",
+				"--client-ca-file=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt",
+				"--config-file=/etc/kube-rbac-config/config-file.json",
+			},
+			Ports: []corev1.ContainerPort{{
+				Name:          "https",
+				ContainerPort: int32(KubeRBACProxyPortNumber),
+			}},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "serving-cert",
+					MountPath: "/etc/tls-secret",
+				},
+				{
+					Name:      "kube-rbac-config",
+					MountPath: "/etc/kube-rbac-config",
+				},
+			},
+		}},
+		Volumes: []corev1.Volume{
+			{
+				Name: "serving-cert",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: PrometheusServingCertSecretName,
+					},
+				},
+			},
+			{
+				Name: "kube-rbac-config",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: PrometheusKubeRBACPoxyConfigMapName,
+						},
+					},
+				},
+			},
+		},
 	},
 }
