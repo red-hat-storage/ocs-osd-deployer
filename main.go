@@ -41,6 +41,7 @@ import (
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
+	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v1alpha1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"github.com/red-hat-storage/ocs-osd-deployer/controllers"
 	// +kubebuilder:scaffold:imports
@@ -82,6 +83,8 @@ func addAllSchemes(scheme *runtime.Scheme) {
 	utilruntime.Must(openshiftv1.AddToScheme(scheme))
 
 	utilruntime.Must(odfv1a1.AddToScheme(scheme))
+
+	utilruntime.Must(ocsv1alpha1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 }
