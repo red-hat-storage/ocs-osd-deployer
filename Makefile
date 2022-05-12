@@ -81,31 +81,7 @@ run: generate fmt vet manifests export_env_vars
 	kubectl create secret generic ${ADDON_NAME}-smtp -n ${NAMESPACE} --from-literal host="smtp.sendgrid.net" --from-literal password="test-key" --from-literal port="587" \
 	--from-literal username="apikey" --dry-run=client -oyaml | kubectl apply -f -
 	kubectl create configmap rook-ceph-operator-config -n ${NAMESPACE} --dry-run=client -oyaml | kubectl apply -f -
-	for i in ocs-operator-0.1 mcg-operator-0.1; do \
-		echo -e "apiVersion: operators.coreos.com/v1alpha1" \
-	      "\nkind: ClusterServiceVersion" \
-		  "\nmetadata:" \
-		  "\n  name: $$i" \
-		  "\n  namespace: ${NAMESPACE}" \
-		  "\nspec:" \
-		  "\n  displayName: ocs operator" \
-		  "\n  install:" \
-		  "\n    spec:" \
-		  "\n      deployments:" \
-		  "\n      - name: test" \
-		  "\n        spec:" \
-		  "\n          selector:" \
-		  "\n            matchLabels:" \
-		  "\n              app: test" \
-		  "\n          template:" \
-		  "\n            metadata:" \
-		  "\n              labels:" \
-		  "\n                app: test" \
-		  "\n            spec:" \
-		  "\n              containers:" \
-		  "\n              - name: test" \
-		  "\n    strategy: deployment" | kubectl apply -f -; \
-	 	done
+	envsubst < makefileutils.yaml | kubectl apply -f -
 	go run ./main.go
 
 # Install CRDs into a cluster
