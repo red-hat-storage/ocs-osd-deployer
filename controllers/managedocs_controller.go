@@ -55,6 +55,7 @@ import (
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
+	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v1alpha1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
@@ -586,15 +587,26 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 
 		// Check if we need and can uninstall
 		if initiateUninstall && r.areComponentsReadyForUninstall() {
-			found, err := r.findOCSVolumeClaims()
-			if err != nil {
-				return ctrl.Result{}, err
+			switch r.DeploymentType {
+			case convergedDeploymentType, consumerDeploymentType:
+				found, err := r.hasOCSVolumes()
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				if found {
+					r.Log.Info("Found consumer PVs using OCS storageclasses, cannot proceed with uninstallation")
+					return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+				}
+			case providerDeploymentType:
+				found, err := r.hasOCSStorageConsumers()
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				if found {
+					r.Log.Info("Found OCS storage consumers, cannot proceed with uninstallation")
+					return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+				}
 			}
-			if found {
-				r.Log.Info("Found consumer PVCs using OCS storageclasses, cannot proceed on uninstallation")
-				return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-			}
-
 			r.Log.Info("starting OCS uninstallation - deleting managedocs")
 			if err := r.delete(r.managedOCS); err != nil {
 				return ctrl.Result{}, fmt.Errorf("unable to delete managedocs: %v", err)
@@ -1647,7 +1659,7 @@ func (r *ManagedOCSReconciler) areComponentsReadyForUninstall() bool {
 		subComponents.Alertmanager.State == v1.ComponentReady
 }
 
-func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
+func (r *ManagedOCSReconciler) hasOCSVolumes() (bool, error) {
 	// get all the storage class
 	storageClassList := storagev1.StorageClassList{}
 	if err := r.UnrestrictedClient.List(r.ctx, &storageClassList); err != nil {
@@ -1666,7 +1678,7 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 
 	// get all the PVs
 	pvList := &corev1.PersistentVolumeList{}
-	if err := r.UnrestrictedClient.List(r.ctx, pvList); err != nil {
+	if err := r.UnrestrictedClient.List(r.ctx, pvList, &client.ListOptions{Limit: int64(1)}); err != nil {
 		return false, fmt.Errorf("unable to list persistent volumes: %v", err)
 	}
 
@@ -1678,6 +1690,14 @@ func (r *ManagedOCSReconciler) findOCSVolumeClaims() (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (r *ManagedOCSReconciler) hasOCSStorageConsumers() (bool, error) {
+	storageConsumerList := ocsv1alpha1.StorageConsumerList{}
+	if err := r.Client.List(r.ctx, &storageConsumerList, &client.ListOptions{Limit: int64(1)}); err != nil {
+		return false, fmt.Errorf("unable to list storage consumers: %v", err)
+	}
+	return len(storageConsumerList.Items) > 0, nil
 }
 
 func (r *ManagedOCSReconciler) reconcileCSV() error {
