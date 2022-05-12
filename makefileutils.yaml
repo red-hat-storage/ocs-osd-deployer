@@ -1,0 +1,88 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: mcg-operator-0.1
+  namespace: $NAMESPACE
+spec:
+  displayName: MCG Operator
+  install:
+    spec:
+      deployments:
+        - name: test
+          spec:
+            selector:
+              matchLabels:
+                app: test
+            template:
+              metadata:
+                labels:
+                  app: test
+              spec:
+                containers:
+                  - name: test
+    strategy: deployment
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: ocs-operator-0.1
+  namespace: $NAMESPACE
+spec:
+  displayName: OCS Operator
+  install:
+    spec:
+      deployments:
+        - name: test
+          spec:
+            selector:
+              matchLabels:
+                app: test
+            template:
+              metadata:
+                labels:
+                  app: test
+              spec:
+                containers:
+                  - name: test
+    strategy: deployment
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: ocs-osd-deployer-0.1
+  namespace: $NAMESPACE
+spec:
+  displayName: OCS OSD Deployer
+  install:
+    spec:
+      deployments:
+        - name: ocs-osd-controller-manager
+          spec:
+            selector:
+              matchLabels:
+                app: test
+            template:
+              metadata:
+                labels:
+                  app: test
+              spec:
+                containers:
+                  - name: test
+                  - name: kube-rbac-proxy
+                    image: gcr.io/kubebuilder/kube-rbac-proxy:v0.11.0
+    strategy: deployment
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-monitoring
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-datasources-v2
+  namespace: openshift-monitoring
+type: Opaque
+data:
+  prometheus.yaml: ewogICAgImRhdGFzb3VyY2VzIjogWwogICAgICAgIHsKICAgICAgICAgICAgInNlY3VyZUpzb25EYXRhIjogewogICAgICAgICAgICAgICAgImJhc2ljQXV0aFBhc3N3b3JkIjogInRlc3QiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJiYXNpY0F1dGhVc2VyIjogImludGVybmFsIgogICAgICAgIH0KICAgIF0KfQ==
