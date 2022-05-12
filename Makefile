@@ -3,6 +3,8 @@ VERSION ?= 2.0.2
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+# Makefile uses sh shell by default but we want to use bash
+SHELL := /bin/bash
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
