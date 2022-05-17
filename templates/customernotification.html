@@ -19,7 +19,7 @@
                         {{ if and (eq .Value "CephClusterCriticallyFull" ) (eq $FirstAlert true ) }}
                             Ceph Cluster is Critically Full
                             <br><br>
-                            Your storage cluster utilization has crossed 80% and will move into a read-only state at 85%! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues. It is common to be alerted about OSD devices entering near-full or full states prior to this alert.
+                            Your storage cluster utilization has crossed 80% and will move into a read-only state at 85%! Please free up some space or if possible expand the storage cluster immediately to prevent any service access issues.
                             
                             {{ $FirstAlert = false }}
                         {{ end }}
