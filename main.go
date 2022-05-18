@@ -132,7 +132,7 @@ func main() {
 		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
 		DeploymentType:               envVars[deploymentTypeEnvVarName],
 		CustomerNotificationHTMLPath: "templates/customernotification.html",
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, nil); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
 	}
