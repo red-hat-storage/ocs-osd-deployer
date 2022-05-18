@@ -172,9 +172,11 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="odf.openshift.io",namespace=system,resources=storagesystems,verbs=list;watch;delete
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
-func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	ctrlOptions := controller.Options{
-		MaxConcurrentReconciles: 1,
+func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *controller.Options) error {
+	if ctrlOptions == nil {
+		ctrlOptions = &controller.Options{
+			MaxConcurrentReconciles: 1,
+		}
 	}
 	managedOCSPredicates := builder.WithPredicates(
 		predicate.GenerationChangedPredicate{},
@@ -249,7 +251,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(ctrlOptions).
+		WithOptions(*ctrlOptions).
 		For(&v1.ManagedOCS{}, managedOCSPredicates).
 
 		// Watch owned resources

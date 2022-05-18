@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -37,8 +38,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -142,7 +145,8 @@ var _ = BeforeSuite(func() {
 		Expect(k8sClient).ToNot(BeNil())
 
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-			Scheme: scheme.Scheme,
+			Scheme:    scheme.Scheme,
+			Namespace: testPrimaryNamespace,
 		})
 		Expect(err).ToNot(HaveOccurred())
 
@@ -160,7 +164,12 @@ var _ = BeforeSuite(func() {
 			CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
 		}
 
-		err = (testReconciler).SetupWithManager(k8sManager)
+		ctrlOptions := &controller.Options{
+			MaxConcurrentReconciles: 1,
+			RateLimiter:             workqueue.NewItemFastSlowRateLimiter(5*time.Millisecond, 10*time.Second, 500),
+		}
+
+		err = (testReconciler).SetupWithManager(k8sManager, ctrlOptions)
 		Expect(err).ToNot(HaveOccurred())
 
 		go func() {
