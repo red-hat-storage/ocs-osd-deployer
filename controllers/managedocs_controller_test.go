@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -581,6 +580,11 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("there is no size field in the add-on parameters secret", func() {
 				It("should not create a reconciled resources", func() {
+					// quota size isn't enforced by provider when consumer supplies it
+					if testReconciler.DeploymentType == consumerDeploymentType {
+						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
+					}
+
 					// Create empty add-on parameters secret
 					secret := addonParamsSecretTemplate.DeepCopy()
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
@@ -599,32 +603,14 @@ var _ = Describe("ManagedOCS controller", func() {
 			})
 			When("there is an invalid size value in the add-on parameters secret", func() {
 				It("should not create reconciled resources", func() {
-					// Create a invalid add-on parameters secret
-					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("AA")
-					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-
-					// Ensure, over a period of time, that the resources are not created
-					resList := []client.Object{
-						scTemplate.DeepCopy(),
-						promTemplate.DeepCopy(),
-						amTemplate.DeepCopy(),
-					}
-					utils.EnsureNoResources(k8sClient, ctx, resList, timeout, interval)
-
-					// Remove the secret for future cases
-					Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-				})
-			})
-			When("there is an invalid storage unit value in the add-on parameters secret", func() {
-				It("should not create reconciled resources", func() {
-					if testReconciler.DeploymentType != consumerDeploymentType {
+					// quota size isn't enforced by provider when consumer supplies it
+					if testReconciler.DeploymentType == consumerDeploymentType {
 						Skip(fmt.Sprintf("Skipping the test as it is not required by %v", testReconciler.DeploymentType))
 					}
 
+					// Create a invalid add-on parameters secret
 					secret := addonParamsSecretTemplate.DeepCopy()
-					secret.Data["size"] = []byte("4")
-					secret.Data["unit"] = []byte("AA")
+					secret.Data["size"] = []byte("AA")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
 					// Ensure, over a period of time, that the resources are not created
@@ -732,8 +718,7 @@ var _ = Describe("ManagedOCS controller", func() {
 						secret.Data["size"] = []byte("1")
 						secret.Data["enable-mcg"] = []byte("false")
 					case consumerDeploymentType:
-						secret.Data["size"] = []byte("1")
-						secret.Data["unit"] = []byte("Ti")
+						// "size" and "unit" params are depreacted for consumer deployment
 						secret.Data["enable-mcg"] = []byte("false")
 						secret.Data["onboarding-ticket"] = []byte("onboarding-tickets")
 						secret.Data["storage-provider-endpoint"] = []byte("0.0.0.0:36179")
@@ -762,8 +747,8 @@ var _ = Describe("ManagedOCS controller", func() {
 						Expect(es.OnboardingTicket).Should(Equal("onboarding-tickets"))
 						Expect(es.StorageProviderEndpoint).Should(Equal("0.0.0.0:36179"))
 
-						sizeInBytes, _ := es.RequestedCapacity.AsInt64()
-						Expect(sizeInBytes).Should(Equal(int64(math.Pow(1024, 4))))
+						want, _ := resource.ParseQuantity("1024Ti")
+						Expect(es.RequestedCapacity.Cmp(want)).Should(Equal(0))
 					case providerDeploymentType:
 						ds := sc.Spec.StorageDeviceSets[0]
 						Expect(ds.Count).Should(Equal(1))
