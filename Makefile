@@ -30,6 +30,11 @@ endif
 OS = $(shell go env GOOS)
 ARCH = $(shell go env GOARCH)
 
+BINDIR := $(shell pwd)/bin
+OPERATOR_SDK_VERSION ?= v1.8.0
+BUNDLE_PACKAGE ?= ocs-osd-deployer
+OPERATOR_NAMESPACE ?=
+REPLACES ?=
 
 all: manager readinessServer
 
@@ -162,14 +167,38 @@ else
 KUSTOMIZE=$(shell which kustomize)
 endif
 
+OPERATOR_SDK = $(BINDIR)/operator-sdk
+operator-sdk:
+ifeq (,$(wildcard $(OPERATOR_SDK)))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPERATOR_SDK)) ;\
+	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_${OS}_${ARCH};\
+	chmod +x $(OPERATOR_SDK) ;\
+	}
+else
+endif
+
 # Generate bundle manifests and metadata, then validate generated files.
 .PHONY: bundle
-bundle: manifests kustomize
-	operator-sdk generate kustomize manifests -q
+bundle: manifests kustomize operator-sdk
+ifneq ($(and $(REPLACES),$(OPERATOR_NAMESPACE)),)
+	rm -rf bundle
+	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
+	cd config/manifests/bases && \
+		rm -rf kustomization.yaml && \
+		$(KUSTOMIZE) create --resources $(BUNDLE_PACKAGE).clusterserviceversion.yaml && \
+		$(KUSTOMIZE) edit add annotation --force 'olm.skipRange':">=0.0.1 <$(VERSION)" && \
+		$(KUSTOMIZE) edit add patch --name $(BUNDLE_PACKAGE).v0.0.0 --kind ClusterServiceVersion \
+		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
+	cd config/manifests && $(KUSTOMIZE) edit set namespace $(OPERATOR_NAMESPACE)
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
-	operator-sdk bundle validate $(OUTPUT_DIR)
+	$(OPERATOR_SDK) bundle validate $(OUTPUT_DIR)
+else
+	@echo Variables 'REPLACES' and 'OPERATOR_NAMESPACE' are mandatory for generating bundle
+endif
 
 # Build the bundle image.
 .PHONY: bundle-build
