@@ -510,6 +510,15 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.addonParams[key] = string(value)
 		}
 
+		// Deprecating consumer requested capacity addon parameter by overriding it with a very high pre-defined value
+		if r.DeploymentType == consumerDeploymentType {
+			r.Log.Info(fmt.Sprintf("Overriding addon parameter '%s' (currently '%s') with 1024", storageSizeKey, r.addonParams[storageSizeKey]))
+			r.addonParams[storageSizeKey] = "1024"
+
+			r.Log.Info(fmt.Sprintf("Overriding addon parameter '%s' (currently '%s') with Ti", storageUnitKey, r.addonParams[storageUnitKey]))
+			r.addonParams[storageUnitKey] = "Ti"
+		}
+
 		// Reconcile the different resources
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
