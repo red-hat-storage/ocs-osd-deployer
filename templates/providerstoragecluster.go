@@ -90,10 +90,13 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 		AllowRemoteStorageConsumers: true,
 		ManagedResources: ocsv1.ManagedResourcesSpec{
 			CephBlockPools: ocsv1.ManageCephBlockPools{
-				DisableStorageClass: false,
+				ReconcileStrategy:    "ignore",
+				DisableStorageClass:  true,
+				DisableSnapshotClass: true,
 			},
 			CephFilesystems: ocsv1.ManageCephFilesystems{
-				DisableStorageClass: false,
+				DisableStorageClass:  true,
+				DisableSnapshotClass: true,
 			},
 		},
 	},
