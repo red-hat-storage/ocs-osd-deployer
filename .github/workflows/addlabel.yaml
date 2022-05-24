@@ -1,0 +1,46 @@
+name: Add Labels based on comments
+
+on:
+  pull_request:
+    branches: ['*']
+    types: 
+      - "opened"
+      - "edited"
+      - "reopened"
+  issue_comment:
+    branches: ['*']
+    types:
+      - "created"
+      - "edited"
+
+jobs:
+  labelling_job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ startsWith(github.event.comment.body, '/lgtm') }}
+        with:
+          labels: lgtm
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ startsWith(github.event.comment.body, '/approve') }}
+        with:
+          labels: approved
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ startsWith(github.event.comment.body, '/hold') }}
+        with:
+          labels: do-not-merge/hold
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ startsWith(github.event.comment.body, '/wip') }}
+        with:
+          labels: do-not-merge/work-in-progress
+  remove_label_job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-ecosystem/action-remove-labels@v1.3.0
+        if: ${{ startsWith(github.event.comment.body, '/unhold') }}
+        with:
+          labels: |
+            do-not-merge/hold
+            do-not-merge/work-in-progress
