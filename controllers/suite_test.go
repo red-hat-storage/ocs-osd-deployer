@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -58,6 +59,7 @@ var (
 	testReconciler *ManagedOCSReconciler
 	ctx            context.Context
 	cancel         context.CancelFunc
+	testDeployment string
 )
 
 const (
@@ -74,9 +76,20 @@ const (
 	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
 	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
 	testCustomerNotificationHTMLPath           = "../templates/customernotification.html"
+	testDeploymentTypeEnvVarName               = "DEPLOYMENT_TYPE"
 )
 
 func TestAPIs(t *testing.T) {
+
+	// check for which deployment type we need to run the tests for
+	testDeployment = os.Getenv(testDeploymentTypeEnvVarName)
+	if testDeployment != convergedDeploymentType &&
+		testDeployment != providerDeploymentType &&
+		testDeployment != consumerDeploymentType {
+		panic(fmt.Sprintf("Environment var '%s' should be set to one of '%s' '%s' and '%s' values",
+			testDeploymentTypeEnvVarName, convergedDeploymentType, providerDeploymentType, consumerDeploymentType))
+	}
+
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
@@ -162,6 +175,7 @@ var _ = BeforeSuite(func() {
 			DeadMansSnitchSecretName:     testDeadMansSnitchSecretName,
 			SMTPSecretName:               testSMTPSecretName,
 			CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
+			DeploymentType:               testDeployment,
 		}
 
 		ctrlOptions := &controller.Options{
@@ -208,6 +222,50 @@ var _ = BeforeSuite(func() {
 			"test-key": "test-value",
 		}
 		Expect(k8sClient.Create(ctx, rookConfigMap)).ShouldNot(HaveOccurred())
+
+		// create a mock deplyer CSV
+		deployerCSV := &opv1a1.ClusterServiceVersion{}
+		deployerCSV.Name = testDeployerCSVName
+		deployerCSV.Namespace = testPrimaryNamespace
+		deployerCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+		deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []opv1a1.StrategyDeploymentSpec{
+			{
+				Name: "ocs-osd-controller-manager",
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "managedocs"},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{"app": "managedocs"},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "kube-rbac-proxy",
+									Image: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
+
+		// create a mock OCS CSV
+		ocsCSV := &opv1a1.ClusterServiceVersion{}
+		ocsCSV.Name = ocsOperatorName
+		ocsCSV.Namespace = testPrimaryNamespace
+		ocsCSV.Spec.InstallStrategy.StrategyName = "test-strategy"
+		ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
+		Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
+
+		// Create the ManagedOCS resource
+		managedOCS := &v1.ManagedOCS{}
+		managedOCS.Name = managedOCSName
+		managedOCS.Namespace = testPrimaryNamespace
+		Expect(k8sClient.Create(ctx, managedOCS)).ShouldNot(HaveOccurred())
 
 		close(done)
 	}(logFile)
