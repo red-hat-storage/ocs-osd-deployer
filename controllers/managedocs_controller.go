@@ -59,6 +59,8 @@ import (
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	netv1 "k8s.io/api/networking/v1"
+
+	configv1 "github.com/openshift/api/config/v1"
 )
 
 const (
@@ -170,6 +172,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="coordination.k8s.io",namespace=system,resources=leases,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="odf.openshift.io",namespace=system,resources=storagesystems,verbs=list;watch;delete
+// +kubebuilder:rbac:groups="config.openshift.io",resources=clusterversions,verbs=get;list;watch;delete;update;patch
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *controller.Options) error {
@@ -1028,6 +1031,19 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			if container.Name == "kube-rbac-proxy" {
 				container.Image = kubeRbacImage
 			}
+		}
+
+		// getting clusterID
+		clusterVersion := &configv1.ClusterVersion{}
+		err1 := r.UnrestrictedClient.Get(context.Background(), types.NamespacedName{Name: "version"}, clusterVersion)
+
+		if err1 != nil {
+			r.Log.Info(err1.Error())
+		} else {
+			r.Log.Info("Cluster ID - " + string(clusterVersion.Spec.ClusterID))
+
+			clusterID := string(clusterVersion.Spec.ClusterID)
+			desired.Spec.ExternalLabels["clusterid"] = clusterID
 		}
 
 		r.prometheus.Spec = desired.Spec

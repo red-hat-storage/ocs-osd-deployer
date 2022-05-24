@@ -43,6 +43,8 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"github.com/red-hat-storage/ocs-osd-deployer/controllers"
+
+	configv1 "github.com/openshift/api/config/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -83,6 +85,7 @@ func addAllSchemes(scheme *runtime.Scheme) {
 
 	utilruntime.Must(odfv1a1.AddToScheme(scheme))
 
+	utilruntime.Must(configv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
