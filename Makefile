@@ -45,15 +45,18 @@ ENVTEST_ASSETS_DIR = $(shell pwd)/testbin
 setup-envtest:
 	mkdir -p $(ENVTEST_ASSETS_DIR)
 	test -f $(ENVTEST_ASSETS_DIR)/setup-envtest.sh || curl -sSLo $(ENVTEST_ASSETS_DIR)/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.6.3/hack/setup-envtest.sh
-	source $(ENVTEST_ASSETS_DIR)/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR);
+	source $(ENVTEST_ASSETS_DIR)/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR)
 
 test-converged: generate fmt vet manifests setup-envtest
+	source $(ENVTEST_ASSETS_DIR)/setup-envtest.sh; setup_envtest_env $(ENVTEST_ASSETS_DIR); \
 	DEPLOYMENT_TYPE=converged go test ./... -coverprofile converged-cover.out
 
 test-provider: generate fmt vet manifests setup-envtest
+	source $(ENVTEST_ASSETS_DIR)/setup-envtest.sh; setup_envtest_env $(ENVTEST_ASSETS_DIR); \
 	DEPLOYMENT_TYPE=provider go test ./... -coverprofile provider-cover.out
 
 test-consumer: generate fmt vet manifests setup-envtest
+	source $(ENVTEST_ASSETS_DIR)/setup-envtest.sh; setup_envtest_env $(ENVTEST_ASSETS_DIR); \
 	DEPLOYMENT_TYPE=consumer go test ./... -coverprofile consumer-cover.out
 
 test: test-converged test-provider test-consumer
