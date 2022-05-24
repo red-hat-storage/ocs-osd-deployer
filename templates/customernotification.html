@@ -68,6 +68,9 @@
                         <br>
                 {{ end }}
                 <ul>
+                    {{if eq .Name "clusterid" }}
+                        <li>Cluster ID: {{ .Value }}</li>
+                    {{ end }}
                     {{if eq .Name "persistentvolumeclaim" }}
                         <li>PVC Name: {{ .Value }}</li>
                     {{ end }}

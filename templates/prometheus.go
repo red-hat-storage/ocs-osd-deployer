@@ -42,6 +42,7 @@ var (
 
 var PrometheusTemplate = promv1.Prometheus{
 	Spec: promv1.PrometheusSpec{
+		ExternalLabels:         map[string]string{},
 		ServiceAccountName:     "prometheus-k8s",
 		ServiceMonitorSelector: &resourceSelector,
 		PodMonitorSelector:     &resourceSelector,
