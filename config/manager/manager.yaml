@@ -47,6 +47,8 @@ spec:
         - name: SOP_ENDPOINT
         - name: ALERT_SMTP_FROM_ADDR
         - name: DEPLOYMENT_TYPE
+        - name: RHOBS_ENDPOINT
+        - name: RH_SSO_TOKEN_ENDPOINT
       - name: readiness-server
         command:
         - /readinessServer

@@ -42,6 +42,8 @@ export ADDON_NAME = ocs-converged
 export SOP_ENDPOINT = https://red-hat-storage.github.io/ocs-sop/sop/OSD/{{ .GroupLabels.alertname }}.html
 export ALERT_SMTP_FROM_ADDR = noreply-test@test.com
 export DEPLOYMENT_TYPE = converged
+export RHOBS_ENDPOINT = test
+export RH_SSO_TOKEN_ENDPOINT = test
 
 # Run tests
 ENVTEST_ASSETS_DIR = $(shell pwd)/testbin

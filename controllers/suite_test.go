@@ -79,6 +79,9 @@ const (
 	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
 	testCustomerNotificationHTMLPath           = "../templates/customernotification.html"
 	testDeploymentTypeEnvVarName               = "DEPLOYMENT_TYPE"
+	testRHOBSEndpointEnvVarName                = "RHOBS_ENDPOINT"
+	testRHssoTokenEndpointEnvVarName           = "RH_SSO_TOKEN_ENDPOINT"
+	testRHOBSSecretName                        = "test-addon-prom-remote-write"
 )
 
 func TestAPIs(t *testing.T) {
@@ -184,6 +187,9 @@ var _ = BeforeSuite(func() {
 			SMTPSecretName:               testSMTPSecretName,
 			CustomerNotificationHTMLPath: testCustomerNotificationHTMLPath,
 			DeploymentType:               testDeployment,
+			RHOBSEndpoint:                os.Getenv(testRHOBSEndpointEnvVarName),
+			RHSSOTokenEndpoint:           os.Getenv(testRHssoTokenEndpointEnvVarName),
+			RHOBSSecretName:              testRHOBSSecretName,
 		}
 
 		ctrlOptions := &controller.Options{

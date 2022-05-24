@@ -49,11 +49,13 @@ import (
 )
 
 const (
-	namespaceEnvVarName         = "NAMESPACE"
-	addonNameEnvVarName         = "ADDON_NAME"
-	sopEndpointEnvVarName       = "SOP_ENDPOINT"
-	alertSMTPFromAddrEnvVarName = "ALERT_SMTP_FROM_ADDR"
-	deploymentTypeEnvVarName    = "DEPLOYMENT_TYPE"
+	namespaceEnvVarName          = "NAMESPACE"
+	addonNameEnvVarName          = "ADDON_NAME"
+	sopEndpointEnvVarName        = "SOP_ENDPOINT"
+	alertSMTPFromAddrEnvVarName  = "ALERT_SMTP_FROM_ADDR"
+	deploymentTypeEnvVarName     = "DEPLOYMENT_TYPE"
+	rhobsEndpointEnvVarName      = "RHOBS_ENDPOINT"
+	rhssoTokenEndpointEnvVarName = "RH_SSO_TOKEN_ENDPOINT"
 )
 
 var (
@@ -137,6 +139,9 @@ func main() {
 		AlertSMTPFrom:                envVars[alertSMTPFromAddrEnvVarName],
 		DeploymentType:               envVars[deploymentTypeEnvVarName],
 		CustomerNotificationHTMLPath: "templates/customernotification.html",
+		RHOBSSecretName:              fmt.Sprintf("%v-prom-remote-write", addonName),
+		RHOBSEndpoint:                envVars[rhobsEndpointEnvVarName],
+		RHSSOTokenEndpoint:           envVars[rhssoTokenEndpointEnvVarName],
 	}).SetupWithManager(mgr, nil); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -170,11 +175,13 @@ func getUnrestrictedClient() client.Client {
 
 func readEnvVars() (map[string]string, error) {
 	envVars := map[string]string{
-		namespaceEnvVarName:         "",
-		addonNameEnvVarName:         "",
-		sopEndpointEnvVarName:       "",
-		alertSMTPFromAddrEnvVarName: "",
-		deploymentTypeEnvVarName:    "",
+		namespaceEnvVarName:          "",
+		addonNameEnvVarName:          "",
+		sopEndpointEnvVarName:        "",
+		alertSMTPFromAddrEnvVarName:  "",
+		deploymentTypeEnvVarName:     "",
+		rhobsEndpointEnvVarName:      "",
+		rhssoTokenEndpointEnvVarName: "",
 	}
 	for envVarName := range envVars {
 		val, found := os.LookupEnv(envVarName)
