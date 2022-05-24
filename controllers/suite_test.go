@@ -180,7 +180,7 @@ var _ = BeforeSuite(func() {
 
 		ctrlOptions := &controller.Options{
 			MaxConcurrentReconciles: 1,
-			RateLimiter:             workqueue.NewItemFastSlowRateLimiter(5*time.Millisecond, 10*time.Second, 500),
+			RateLimiter:             workqueue.NewItemFastSlowRateLimiter(0, 50*time.Millisecond, 0),
 		}
 
 		err = (testReconciler).SetupWithManager(k8sManager, ctrlOptions)
