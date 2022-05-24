@@ -107,6 +107,8 @@ const (
 	convergedDeploymentType                = "converged"
 	consumerDeploymentType                 = "consumer"
 	providerDeploymentType                 = "provider"
+	rhobsRemoteWriteConfigIdSecretKey      = "prom-remote-write-config-id"
+	rhobsRemoteWriteConfigSecretName       = "prom-remote-write-config-secret"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -126,6 +128,9 @@ type ManagedOCSReconciler struct {
 	AlertSMTPFrom                string
 	CustomerNotificationHTMLPath string
 	DeploymentType               string
+	RHOBSSecretName              string
+	RHOBSEndpoint                string
+	RHSSOTokenEndpoint           string
 
 	ctx                                context.Context
 	managedOCS                         *v1.ManagedOCS
@@ -151,6 +156,7 @@ type ManagedOCSReconciler struct {
 	addonParams                        map[string]string
 	onboardingValidationKeySecret      *corev1.Secret
 	prometheusKubeRBACConfigMap        *corev1.ConfigMap
+	rhobsRemoteWriteConfigSecret       *corev1.Secret
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -192,7 +198,8 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 				return name == r.AddonParamSecretName ||
 					name == r.PagerdutySecretName ||
 					name == r.DeadMansSnitchSecretName ||
-					name == r.SMTPSecretName
+					name == r.SMTPSecretName ||
+					name == r.RHOBSSecretName
 			},
 		),
 	)
@@ -441,6 +448,9 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.prometheusKubeRBACConfigMap.Name = templates.PrometheusKubeRBACPoxyConfigMapName
 	r.prometheusKubeRBACConfigMap.Namespace = r.namespace
 
+	r.rhobsRemoteWriteConfigSecret = &corev1.Secret{}
+	r.rhobsRemoteWriteConfigSecret.Name = r.RHOBSSecretName
+	r.rhobsRemoteWriteConfigSecret.Namespace = r.namespace
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -1057,7 +1067,38 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			},
 			Key: alertRelabelConfigSecretKey,
 		}
-
+		if r.DeploymentType != convergedDeploymentType {
+			if err := r.get(r.rhobsRemoteWriteConfigSecret); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			if r.rhobsRemoteWriteConfigSecret.UID != "" {
+				rhobsSecretData := r.rhobsRemoteWriteConfigSecret.Data
+				if _, found := rhobsSecretData[rhobsRemoteWriteConfigIdSecretKey]; !found {
+					return fmt.Errorf("rhobs secret does not contain a value for key %v", rhobsRemoteWriteConfigIdSecretKey)
+				}
+				if _, found := rhobsSecretData[rhobsRemoteWriteConfigSecretName]; !found {
+					return fmt.Errorf("rhobs secret does not contain a value for key %v", rhobsRemoteWriteConfigSecretName)
+				}
+				rhobsAudience, found := rhobsSecretData["rhobs-audience"]
+				if !found {
+					return fmt.Errorf("rhobs secret does not contain a value for key rhobs-audience")
+				}
+				remoteWriteSpec := &r.prometheus.Spec.RemoteWrite[0]
+				remoteWriteSpec.URL = r.RHOBSEndpoint
+				remoteWriteSpec.OAuth2.ClientID.Secret.LocalObjectReference.Name = r.RHOBSSecretName
+				remoteWriteSpec.OAuth2.ClientID.Secret.Key = rhobsRemoteWriteConfigIdSecretKey
+				remoteWriteSpec.OAuth2.ClientSecret.LocalObjectReference.Name = r.RHOBSSecretName
+				remoteWriteSpec.OAuth2.ClientSecret.Key = rhobsRemoteWriteConfigSecretName
+				remoteWriteSpec.OAuth2.TokenURL = r.RHSSOTokenEndpoint
+				remoteWriteSpec.OAuth2.EndpointParams["audience"] = string(rhobsAudience)
+			} else {
+				r.Log.Info("RHOBS remote write config secret not found , disabling remote write")
+				r.prometheus.Spec.RemoteWrite = nil
+			}
+		} else {
+			// removing remote write spec for converged clusters
+			r.prometheus.Spec.RemoteWrite = nil
+		}
 		return nil
 	})
 	if err != nil {

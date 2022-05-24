@@ -161,6 +161,17 @@ var _ = Describe("ManagedOCS controller", func() {
 		},
 		Data: map[string][]byte{},
 	}
+	rhobsSecretTemplate := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testRHOBSSecretName,
+			Namespace: testPrimaryNamespace,
+		},
+		Data: map[string][]byte{
+			"prom-remote-write-config-id":     []byte("test"),
+			"prom-remote-write-config-secret": []byte("test"),
+			"rhobs-audience":                  []byte("test"),
+		},
+	}
 	amConfigTemplate := promv1a1.AlertmanagerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      alertmanagerConfigName,
@@ -654,6 +665,55 @@ var _ = Describe("ManagedOCS controller", func() {
 					}
 					return sc.Spec.MultiCloudGateway.ReconcileStrategy == "manage"
 				}, timeout, interval).Should(BeTrue())
+			})
+		})
+		When("there is no rhobs secret", func() {
+			It("should  create prometheus resource without remote write spec", func() {
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
+					Eventually(func() bool {
+						prom := promTemplate.DeepCopy()
+						err := k8sClient.Get(ctx, utils.GetResourceKey(prom), prom)
+						if err != nil {
+							return false
+						}
+						return len(prom.Spec.RemoteWrite) == 0
+					}, timeout, interval).Should(BeTrue())
+				}
+			})
+		})
+		When("there is a rhobs secret with missing values", func() {
+			It("should not create prometheus resource with remote write spec", func() {
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					secret := rhobsSecretTemplate.DeepCopy()
+					delete(secret.Data, "prom-remote-write-config-id")
+					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+					Eventually(func() bool {
+						prom := promTemplate.DeepCopy()
+						err := k8sClient.Get(ctx, utils.GetResourceKey(prom), prom)
+						if err != nil {
+							return false
+						}
+						return len(prom.Spec.RemoteWrite) == 0
+					}, timeout, interval).Should(BeTrue())
+				}
+			})
+		})
+		When("there is a rhobs secret", func() {
+			It("should create prometheus resources", func() {
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					secret := rhobsSecretTemplate.DeepCopy()
+					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
+					Eventually(func() bool {
+						prom := promTemplate.DeepCopy()
+						err := k8sClient.Get(ctx, utils.GetResourceKey(prom), prom)
+						if err != nil {
+							return false
+						}
+						return len(prom.Spec.RemoteWrite) > 0
+					}, timeout, interval).Should(BeTrue())
+				}
 			})
 		})
 		When("MCG is already enabled and enable-mcg value in addon-on parameter secret is false", func() {
