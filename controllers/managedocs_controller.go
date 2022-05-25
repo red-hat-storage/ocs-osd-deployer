@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
@@ -59,8 +60,6 @@ import (
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	netv1 "k8s.io/api/networking/v1"
-
-	configv1 "github.com/openshift/api/config/v1"
 )
 
 const (
@@ -172,7 +171,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="coordination.k8s.io",namespace=system,resources=leases,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="odf.openshift.io",namespace=system,resources=storagesystems,verbs=list;watch;delete
-// +kubebuilder:rbac:groups="config.openshift.io",resources=clusterversions,verbs=get;list;watch;delete;update;patch
+// +kubebuilder:rbac:groups="config.openshift.io",resources=clusterversions,verbs=get
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *controller.Options) error {
@@ -1035,16 +1034,11 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 
 		// getting clusterID
 		clusterVersion := &configv1.ClusterVersion{}
-		err1 := r.UnrestrictedClient.Get(context.Background(), types.NamespacedName{Name: "version"}, clusterVersion)
-
-		if err1 != nil {
-			r.Log.Info(err1.Error())
-		} else {
-			r.Log.Info("Cluster ID - " + string(clusterVersion.Spec.ClusterID))
-
-			clusterID := string(clusterVersion.Spec.ClusterID)
-			desired.Spec.ExternalLabels["clusterid"] = clusterID
+		if err := r.UnrestrictedClient.Get(context.Background(), types.NamespacedName{Name: "version"}, clusterVersion); err != nil {
+			return err
 		}
+		clusterID := string(clusterVersion.Spec.ClusterID)
+		desired.Spec.ExternalLabels["clusterid"] = clusterID
 
 		r.prometheus.Spec = desired.Spec
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace

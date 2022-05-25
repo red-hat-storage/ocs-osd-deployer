@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -43,8 +44,6 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
 	"github.com/red-hat-storage/ocs-osd-deployer/controllers"
-
-	configv1 "github.com/openshift/api/config/v1"
 	// +kubebuilder:scaffold:imports
 )
 
