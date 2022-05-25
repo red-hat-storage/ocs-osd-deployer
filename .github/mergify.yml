@@ -1,0 +1,66 @@
+pull_request_rules:
+  - name: assign PRs for review to nb-ohad
+    conditions:
+      - "label!=do-not-merge/work-in-progress"
+    actions:
+      request_reviews:
+        users:
+          - nb-ohad
+  - name: close PR
+    conditions:
+      - "label=close"
+    actions:
+      comment: 
+        message: "@{{author}} this pull request is closed 🛑"
+      close:
+  - name: warn on conflicts
+    conditions:
+      - conflict
+    actions:
+      comment:
+        message: "@{{author}} this pull request is now in conflict 😩"
+      label:
+        add:
+          - conflict
+  - name: remove conflict label if not needed
+    conditions:
+      - -conflict
+    actions:
+      label:
+        remove:
+          - conflict
+  - name: add label on requested changes
+    conditions:
+      - "#changes-requested-reviews-by>0"
+    actions:
+      comment:
+        message: "@{{author}} this pull request has requested changes 📝"
+      label:
+        add:
+          - changes-requested
+  - name: remove changes-requested if not needed
+    conditions:
+      - "#changes-requested-reviews-by=0"
+      - "label=changes-requested"
+    actions:
+      label:
+        remove:
+          - changes-requested
+  - name: add approved label
+    conditions:
+      - "approved-reviews-by=nb-ohad"
+    actions:
+      label:
+        add:
+          - approved
+  - name: auto merge PR
+    conditions:
+      - "#approved-reviews-by>=1"
+      - "#review-requested=0"
+      - "label=approved"
+      - "label!=changes-requested"
+      - "label!=do-not-merge/hold"
+      - "label!=do-not-merge/work-in-progress"
+    actions:
+      merge:
+        method: merge
