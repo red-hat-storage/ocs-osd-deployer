@@ -12,7 +12,7 @@ require (
 	github.com/operator-framework/api v0.10.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.53.1
 	github.com/red-hat-data-services/odf-operator v0.0.0-20220210164358-c9fa5821600f
-	github.com/red-hat-storage/ocs-operator v0.0.1-master.0.20220204091141-8b4aa12ac5a9
+	github.com/red-hat-storage/ocs-operator v0.4.10
 	github.com/rook/rook v1.8.3
 	go.uber.org/zap v1.19.0
 	gopkg.in/yaml.v2 v2.4.0
