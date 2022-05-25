@@ -26,6 +26,12 @@ rules:
   - update
   - watch
 - apiGroups:
+  - config.openshift.io
+  resources:
+  - clusterversions
+  verbs:
+  - get
+- apiGroups:
   - storage.k8s.io
   resources:
   - storageclass
