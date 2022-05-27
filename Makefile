@@ -1,5 +1,6 @@
 # Current Operator version
 VERSION ?= 2.0.2
+OPERATOR_SDK_VERSION ?= v1.8.0
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
@@ -29,7 +30,6 @@ endif
 
 OS = $(shell go env GOOS)
 ARCH = $(shell go env GOARCH)
-
 
 all: manager readinessServer
 
@@ -176,14 +176,25 @@ else
 KUSTOMIZE=$(shell which kustomize)
 endif
 
+OPERATOR_SDK = $(CURDIR)/bin/operator-sdk
+operator-sdk:
+ifeq (,$(wildcard $(OPERATOR_SDK)))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPERATOR_SDK)) ;\
+	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_${OS}_${ARCH};\
+	chmod +x $(OPERATOR_SDK) ;\
+	}
+endif
+
 # Generate bundle manifests and metadata, then validate generated files.
 .PHONY: bundle
-bundle: manifests kustomize
-	operator-sdk generate kustomize manifests -q
+bundle: manifests kustomize operator-sdk
+	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
-	operator-sdk bundle validate $(OUTPUT_DIR)
+	$(OPERATOR_SDK) bundle validate $(OUTPUT_DIR)
 
 # Build the bundle image.
 .PHONY: bundle-build
