@@ -181,6 +181,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ocs.openshift.io
+  resources:
+  - storageconsumers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - odf.openshift.io
   resources:
   - storagesystems
