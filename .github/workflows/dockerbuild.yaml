@@ -1,0 +1,21 @@
+---
+name: image-builder
+
+on:
+  pull_request:
+    branches: ['*']
+
+jobs:
+  docker-build:
+    name: docker-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set GO_VERSION
+        run: echo "GO_VERSION=$(grep -m 1 -r 'go' go.mod | awk '{print $2}')" >> $GITHUB_ENV
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build operator docker image
+        run: make docker-build
