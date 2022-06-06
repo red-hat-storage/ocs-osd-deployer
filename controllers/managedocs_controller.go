@@ -701,10 +701,7 @@ func (r *ManagedOCSReconciler) updateComponentStatus() {
 func (r *ManagedOCSReconciler) verifyComponentsDoNotExist() bool {
 	subComponent := r.managedOCS.Status.Components
 
-	if subComponent.StorageCluster.State == v1.ComponentNotFound {
-		return true
-	}
-	return false
+	return subComponent.StorageCluster.State == v1.ComponentNotFound
 }
 
 func (r *ManagedOCSReconciler) reconcileStorageCluster() error {
@@ -1180,13 +1177,12 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 			}
 		}
 
-		smtpSecretData := map[string][]byte{}
 		if r.smtpSecret.UID == "" {
 			if err := r.get(r.smtpSecret); err != nil {
 				return fmt.Errorf("Unable to get SMTP secret: %v", err)
 			}
 		}
-		smtpSecretData = r.smtpSecret.Data
+		smtpSecretData := r.smtpSecret.Data
 		smtpHost := string(smtpSecretData["host"])
 		if smtpHost == "" {
 			return fmt.Errorf("smtp secret does not contain a host entry")
@@ -1250,9 +1246,8 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() err
 		if err := r.own(r.k8sMetricsServiceMonitorAuthSecret); err != nil {
 			return err
 		}
-		var auth map[string][]byte = nil
-		var err error = nil
-		if auth, err = r.readGrafanaV1Secret(); err != nil {
+		auth, err := r.readGrafanaV1Secret()
+		if err != nil {
 			if errors.IsNotFound(err) {
 				r.Log.Info("Unable to find v1 grafana-datasources secret")
 				auth, err = r.readGrafanaV2Secret()

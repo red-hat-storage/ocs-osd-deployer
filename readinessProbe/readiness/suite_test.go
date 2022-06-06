@@ -20,7 +20,6 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -46,11 +45,6 @@ import (
 const (
 	ManagedOCSName = "test-managedocs"
 	TestNamespace  = "default"
-
-	// Define utility constants for object names and testing timeouts/durations and intervals.
-	timeout  = time.Second * 10
-	duration = time.Second * 10
-	interval = time.Millisecond * 250
 )
 
 var cfg *rest.Config
@@ -93,7 +87,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(k8sClient).ToNot(BeNil())
 
-		go RunServer(k8sClient, types.NamespacedName{Name: ManagedOCSName, Namespace: TestNamespace}, ctrl.Log.WithName("readiness"))
+		go RunServer(k8sClient, types.NamespacedName{Name: ManagedOCSName, Namespace: TestNamespace}, ctrl.Log.WithName("readiness")) //nolint
 
 		ctx := context.Background()
 
