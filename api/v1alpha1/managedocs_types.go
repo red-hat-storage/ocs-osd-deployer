@@ -35,7 +35,8 @@ const (
 
 // ManagedOCSSpec defines the desired state of ManagedOCS
 type ManagedOCSSpec struct {
-	ReconcileStrategy ReconcileStrategy `json:"reconcileStrategy,omitempty"`
+	ReconcileStrategy              ReconcileStrategy `json:"reconcileStrategy,omitempty"`
+	NetworkPolicyReconcileStrategy ReconcileStrategy `json:"networkPolicyReconcileStrategy,omitempty"`
 }
 
 type ComponentState string
@@ -59,8 +60,9 @@ type ComponentStatusMap struct {
 
 // ManagedOCSStatus defines the observed state of ManagedOCS
 type ManagedOCSStatus struct {
-	ReconcileStrategy ReconcileStrategy  `json:"reconcileStrategy,omitempty"`
-	Components        ComponentStatusMap `json:"components"`
+	ReconcileStrategy              ReconcileStrategy  `json:"reconcileStrategy,omitempty"`
+	Components                     ComponentStatusMap `json:"components"`
+	NetworkPolicyReconcileStrategy ReconcileStrategy  `json:"networkPolicyReconcileStrategy,omitempty"`
 }
 
 // +kubebuilder:object:root=true

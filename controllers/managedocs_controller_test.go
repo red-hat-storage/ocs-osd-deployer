@@ -1811,6 +1811,65 @@ var _ = Describe("ManagedOCS controller", func() {
 				utils.WaitForResource(k8sClient, ctx, prometheusProxyIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 			})
 		})
+		When("the networkPolicyReconcileStrategy is set to none", func() {
+			It("should not create egress network Policy", func() {
+				// Set managed OCS networkPolicyReconcileStrategy to none
+				managedOCS := managedOCSTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				managedOCS.Spec.NetworkPolicyReconcileStrategy = "none"
+				Expect(k8sClient.Update(ctx, managedOCS)).Should(Succeed())
+
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+				}
+				// Delete the EgressNetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, egressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Ensure egress network policy is not present
+				utils.EnsureNoResource(k8sClient, ctx, egressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+			})
+			It("should not create prometheus proxy network Policy", func() {
+				// Delete prometheus proxy network policy
+				Expect(k8sClient.Delete(ctx, prometheusProxyIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Ensure prometheus network policy is not present
+				utils.EnsureNoResource(k8sClient, ctx, prometheusProxyIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+			})
+			It("should not create ingress network Policy", func() {
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+				}
+				// Delete the NetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, ingressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Ensure ceph ingress  network policy is not created
+				utils.EnsureNoResource(k8sClient, ctx, ingressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+			})
+			It("should not create ceph ingress network Policy", func() {
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
+				}
+				// Delete the NetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, cephIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+				utils.EnsureNoResource(k8sClient, ctx, cephIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+			})
+			It("should not create provider api server network Policy", func() {
+				if testReconciler.DeploymentType != providerDeploymentType {
+					Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+				}
+				// Delete the NetworkPolicy resource
+				Expect(k8sClient.Delete(ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
+
+				// Ensure provider api server ingress  network policy is not created
+				utils.EnsureNoResource(k8sClient, ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
+
+				// Set managed OCS networkPolicyReconcileStrategy back to strict
+				managedOCS := managedOCSTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(managedOCS), managedOCS)).Should(Succeed())
+				managedOCS.Spec.NetworkPolicyReconcileStrategy = "strict"
+				Expect(k8sClient.Update(ctx, managedOCS)).Should(Succeed())
+			})
+		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {
 			It("should not delete the managedOCS resource", func() {
 				setupUninstallConditions(false, testAddonConfigMapDeleteLabelKey, true, true, true, false, false, false)

@@ -38,6 +38,10 @@ spec:
           spec:
             description: ManagedOCSSpec defines the desired state of ManagedOCS
             properties:
+              networkPolicyReconcileStrategy:
+                description: ReconcileStrategy represent the action the deployer should
+                  take whenever a recncile event occures
+                type: string
               reconcileStrategy:
                 description: ReconcileStrategy represent the action the deployer should
                   take whenever a recncile event occures
@@ -74,6 +78,10 @@ spec:
                 - prometheus
                 - storageCluster
                 type: object
+              networkPolicyReconcileStrategy:
+                description: ReconcileStrategy represent the action the deployer should
+                  take whenever a recncile event occures
+                type: string
               reconcileStrategy:
                 description: ReconcileStrategy represent the action the deployer should
                   take whenever a recncile event occures

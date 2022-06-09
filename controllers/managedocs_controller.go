@@ -147,6 +147,7 @@ type ManagedOCSReconciler struct {
 	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
 	namespace                          string
 	reconcileStrategy                  v1.ReconcileStrategy
+	networkPolicyReconcileStrategy     v1.ReconcileStrategy
 	addonParams                        map[string]string
 	onboardingValidationKeySecret      *corev1.Secret
 	prometheusKubeRBACConfigMap        *corev1.ConfigMap
@@ -501,6 +502,12 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.reconcileStrategy = v1.ReconcileStrategyNone
 		}
 
+		// Find the effective Network Policy reconcile strategy
+		r.networkPolicyReconcileStrategy = v1.ReconcileStrategyStrict
+		if strings.EqualFold(string(r.managedOCS.Spec.NetworkPolicyReconcileStrategy), string(v1.ReconcileStrategyNone)) {
+			r.networkPolicyReconcileStrategy = v1.ReconcileStrategyNone
+		}
+
 		// Read the add-on parameters secret and store it an addonParams map
 		addonParamSecret := &corev1.Secret{}
 		addonParamSecret.Name = r.AddonParamSecretName
@@ -585,6 +592,7 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		}
 
 		r.managedOCS.Status.ReconcileStrategy = r.reconcileStrategy
+		r.managedOCS.Status.NetworkPolicyReconcileStrategy = r.networkPolicyReconcileStrategy
 
 		// Check if we need and can uninstall
 		if initiateUninstall && r.areComponentsReadyForUninstall() {
@@ -1508,8 +1516,8 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 
 func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 	// Fix for non-converged deployment type will be provided in upcoming PR
-	if r.DeploymentType != convergedDeploymentType {
-		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
+	if r.DeploymentType != convergedDeploymentType || r.networkPolicyReconcileStrategy == v1.ReconcileStrategyNone {
+		r.Log.Info("Non converged deployment or Network Reconcile Strategy set to none, skipping reconcile for egress network policy")
 		return nil
 	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
@@ -1567,6 +1575,10 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
+	if r.networkPolicyReconcileStrategy == v1.ReconcileStrategyNone {
+		r.Log.Info(" Network Reconcile Strategy set to none, skipping reconcile for ingress network policy")
+		return nil
+	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.ingressNetworkPolicy, func() error {
 		if err := r.own(r.ingressNetworkPolicy); err != nil {
 			return err
@@ -1582,6 +1594,10 @@ func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
+	if r.networkPolicyReconcileStrategy == v1.ReconcileStrategyNone {
+		r.Log.Info(" Network Reconcile Strategy set to none, skipping reconcile for ceph ingress network policy")
+		return nil
+	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.cephIngressNetworkPolicy, func() error {
 		if err := r.own(r.cephIngressNetworkPolicy); err != nil {
 			return err
@@ -1597,8 +1613,8 @@ func (r *ManagedOCSReconciler) reconcileCephIngressNetworkPolicy() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileProviderAPIServerNetworkPolicy() error {
-	if r.DeploymentType != providerDeploymentType {
-		r.Log.Info("Non provider deployment, skipping reconcile for api server ingress policy")
+	if r.DeploymentType != providerDeploymentType || r.networkPolicyReconcileStrategy == v1.ReconcileStrategyNone {
+		r.Log.Info("Non provider deployment or Network Reconcile Strategy set to none, skipping reconcile for api server ingress policy")
 		return nil
 	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.providerAPIServerNetworkPolicy, func() error {
@@ -1616,6 +1632,10 @@ func (r *ManagedOCSReconciler) reconcileProviderAPIServerNetworkPolicy() error {
 }
 
 func (r *ManagedOCSReconciler) reconcilePrometheusProxyNetworkPolicy() error {
+	if r.networkPolicyReconcileStrategy == v1.ReconcileStrategyNone {
+		r.Log.Info(" Network Reconcile Strategy set to none, skipping reconcile for prometheus ingress network policy")
+		return nil
+	}
 	r.Log.Info("reconciling PrometheusProxyNetworkPolicy resources")
 
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.prometheusProxyNetworkPolicy, func() error {
