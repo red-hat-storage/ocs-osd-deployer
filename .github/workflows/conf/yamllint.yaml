@@ -1,0 +1,17 @@
+---
+extends: default
+yaml-files:
+  - '*.yaml'
+  - '*.yml'
+  - '.yamllint'
+ignore: |
+  vendor
+  shim
+  config
+rules:
+  line-length: false  # disabled this as screen resolution differs for everyone
+  truthy:
+    allowed-values:
+      - 'true'
+      - 'false'
+      - 'on'  # on is required as github action configuration uses it
