@@ -1,14 +1,15 @@
+---
 name: Do Not Merge
 
 on:
   pull_request:
     types:
-    - opened
-    - reopened
-    - labeled
-    - unlabeled
+      - opened
+      - reopened
+      - labeled
+      - unlabeled
     branches:
-    - '*'
+      - '*'
 
 jobs:
   do-not-merge:
