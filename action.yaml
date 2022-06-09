@@ -1,3 +1,4 @@
+---
 name: Setup Go Environment
 description: Fetch Go version from the go.mod file and use it to setup Go environment
 
@@ -10,4 +11,4 @@ runs:
     - name: set up go env
       uses: actions/setup-go@v3
       with:
-        go-version: ${{ env.GO_VERSION }}    
+        go-version: ${{ env.GO_VERSION }}
