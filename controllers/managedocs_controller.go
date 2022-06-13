@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
@@ -172,6 +173,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="coordination.k8s.io",namespace=system,resources=leases,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="odf.openshift.io",namespace=system,resources=storagesystems,verbs=list;watch;delete
+// +kubebuilder:rbac:groups="config.openshift.io",resources=clusterversions,verbs=get;watch;list
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *controller.Options) error {
@@ -1040,7 +1042,14 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			}
 		}
 
+		clusterVersion := &configv1.ClusterVersion{}
+		clusterVersion.Name = "version"
+		if err := r.get(clusterVersion); err != nil {
+			return err
+		}
+
 		r.prometheus.Spec = desired.Spec
+		r.prometheus.Spec.ExternalLabels["clusterId"] = string(clusterVersion.Spec.ClusterID)
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace
 		r.prometheus.Spec.AdditionalAlertRelabelConfigs = &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
