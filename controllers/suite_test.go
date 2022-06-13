@@ -27,6 +27,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -154,6 +155,9 @@ var _ = BeforeSuite(func() {
 		err = ocsv1alpha1.AddToScheme(scheme.Scheme)
 		Expect(err).NotTo(HaveOccurred())
 
+		err = configv1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
 		// +kubebuilder:scaffold:scheme
 
 		// Client to be use by the test code, using a non cached client
@@ -256,6 +260,12 @@ var _ = BeforeSuite(func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, deployerCSV)).ShouldNot(HaveOccurred())
+
+		//create a mock clusterversion
+		clusterVersion := &configv1.ClusterVersion{}
+		clusterVersion.Name = "version"
+		clusterVersion.Spec.ClusterID = "dummy-cluster-id"
+		Expect(k8sClient.Create(ctx, clusterVersion)).ShouldNot(HaveOccurred())
 
 		// create a mock OCS CSV
 		ocsCSV := &opv1a1.ClusterServiceVersion{}
