@@ -31,8 +31,8 @@ rules:
   - clusterversions
   verbs:
   - get
-  - watch
   - list
+  - watch
 - apiGroups:
   - storage.k8s.io
   resources:

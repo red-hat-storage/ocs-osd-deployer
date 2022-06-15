@@ -1,7 +1,7 @@
 # Current Operator version
-VERSION ?= 2.0.2
+VERSION ?= 2.0.3
 OPERATOR_SDK_VERSION ?= v1.8.0
-REPLACES ?= 2.0.1
+REPLACES ?= 2.0.2
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
