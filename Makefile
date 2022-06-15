@@ -1,10 +1,13 @@
+# ===== Overridable Variables ===== #
+
 # Current Operator version
 VERSION ?= 2.0.3
-OPERATOR_SDK_VERSION ?= v1.18.0
 REPLACES ?= 2.0.2
+
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
@@ -15,8 +18,6 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 OUTPUT_DIR ?= bundle
-BUNDLE_FLAGS = --output-dir=$(OUTPUT_DIR)
-BUNDLE_GEN_FLAGS ?= -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 
 # Image URL to use all building/pushing image targets
 IMG ?= ocs-osd-deployer:latest
@@ -24,8 +25,37 @@ IMG ?= ocs-osd-deployer:latest
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
 USE_IMAGE_DIGESTS ?= false
 ifeq ($(USE_IMAGE_DIGESTS), true)
-    BUNDLE_GEN_FLAGS += --use-image-digests
+    BUNDLE_METADATA_OPTS += --use-image-digests
 endif
+
+BUNDLE_IMGS ?= $(BUNDLE_IMG) 
+CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(VERSION)
+
+ifneq ($(origin CATALOG_BASE_IMG), undefined)
+	FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
+endif 
+
+LOCALBIN ?= $(CURDIR)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+OPERATOR_SDK = $(LOCALBIN)/operator-sdk
+OPM ?= $(LOCALBIN)/opm
+
+## Tool Versions
+KUSTOMIZE_VERSION ?= v3.9.1
+CONTROLLER_TOOLS_VERSION ?= v0.8.0
+ENVTEST_VERSION ?= latest
+OPERATOR_SDK_VERSION ?= v1.21.0
+OPM_VERSION ?= v1.19.1
+
+KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
+
+# ===== Constants ===== #
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.23
@@ -45,6 +75,12 @@ ARCH = $(shell go env GOARCH)
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
+
+ifndef ignore-not-found
+  ignore-not-found = false
+endif
+
+# ===== Make targets ===== #
 
 .PHONY: all
 all: manager readinessServer
@@ -131,7 +167,6 @@ run: generate fmt vet manifests export_env_vars ## Run a controller from your ho
 	envsubst < makefileutils.yaml | kubectl apply -f -
 	go run ./main.go
 
-
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
 	docker build . -t ${IMG}
@@ -141,10 +176,6 @@ docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
 ##@ Deployment
-
-ifndef ignore-not-found
-  ignore-not-found = false
-endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
@@ -165,47 +196,6 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
-CONTROLLER_GEN = $(CURDIR)/bin/controller-gen
-.PHONY: controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0)
-
-.PHONY: kustomize
-KUSTOMIZE = $(CURDIR)/bin/kustomize
-kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.9.1)
-
-OPERATOR_SDK = $(CURDIR)/bin/operator-sdk
-.PHONY: operator-sdk
-operator-sdk: ## Download operator-sdk locally if necessary
-ifeq (,$(wildcard $(OPERATOR_SDK)))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(OPERATOR_SDK)) ;\
-	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_${OS}_${ARCH};\
-	chmod +x $(OPERATOR_SDK) ;\
-	}
-endif
-
-ENVTEST = $(CURDIR)/bin/setup-envtest
-.PHONY: envtest
-envtest: ## Download envtest-setup locally if necessary.
-	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
-
-# go-get-tool will 'go get' any package $2 and install it to $1.
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-define go-get-tool
-@[ -f $(1) ] || { \
-set -e ;\
-TMP_DIR=$$(mktemp -d) ;\
-cd $$TMP_DIR ;\
-go mod init tmp ;\
-echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
-rm -rf $$TMP_DIR ;\
-}
-endef
-
 .PHONY: bundle
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests --interactive=false -q
@@ -216,7 +206,13 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 		$(KUSTOMIZE) edit add annotation --force 'olm.skipRange':">=0.0.1 <$(VERSION)" && \
 		$(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion \
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle \
+		-q \
+		--extra-service-accounts prometheus-k8s \
+		--overwrite \
+		--version $(VERSION) \
+		$(BUNDLE_METADATA_OPTS) \
+		--output-dir=$(OUTPUT_DIR)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
 	$(OPERATOR_SDK) bundle validate $(OUTPUT_DIR)
 
@@ -228,30 +224,6 @@ bundle-build: ## Build the bundle image.
 bundle-push: ## Push the bundle image.
 	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
 
-.PHONY: opm
-OPM = ./bin/opm
-opm: ## Download opm locally if necessary.
-ifeq (,$(wildcard $(OPM)))
-ifeq (,$(shell which opm 2>/dev/null))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(OPM)) ;\
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.19.1/$(OS)-$(ARCH)-opm ;\
-	chmod +x $(OPM) ;\
-	}
-else 
-OPM = $(shell which opm)
-endif
-endif
-
-BUNDLE_IMGS ?= $(BUNDLE_IMG) 
-
-CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:v$(VERSION)
-
-ifneq ($(origin CATALOG_BASE_IMG), undefined)
-	FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
-endif 
-
 .PHONY: catalog-build
 catalog-build: opm ## Build the catalog image.
 	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
@@ -259,3 +231,50 @@ catalog-build: opm ## Build the catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push the catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+##@ Build Dependencies
+
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+ifeq (,$(wildcard $(KUSTOMIZE)))
+$(KUSTOMIZE): $(LOCALBIN)
+	curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN)
+endif
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
+ifeq (,$(wildcard $(CONTROLLER_GEN)))
+$(CONTROLLER_GEN): $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+endif
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
+ifeq (,$(wildcard $(ENVTEST)))
+$(ENVTEST): $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
+endif
+
+.PHONY: operator-sdk
+operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary
+ifeq (,$(wildcard $(OPERATOR_SDK)))
+$(OPERATOR_SDK): $(LOCALBIN)
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPERATOR_SDK)) ;\
+	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_${OS}_${ARCH};\
+	chmod +x $(OPERATOR_SDK) ;\
+	}
+endif
+
+.PHONY: opm
+opm: $(OPM) ## Download opm locally if necessary.
+ifeq (,$(wildcard $(OPM)))
+$(OPM): $(LOCALBIN)
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPM)) ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS)-$(ARCH)-opm ;\
+	chmod +x $(OPM) ;\
+	}
+endif
