@@ -1,6 +1,6 @@
 # Current Operator version
 VERSION ?= 2.0.3
-OPERATOR_SDK_VERSION ?= v1.17.0
+OPERATOR_SDK_VERSION ?= v1.18.0
 REPLACES ?= 2.0.2
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
@@ -16,9 +16,16 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 OUTPUT_DIR ?= bundle
 BUNDLE_FLAGS = --output-dir=$(OUTPUT_DIR)
+BUNDLE_GEN_FLAGS ?= -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 
 # Image URL to use all building/pushing image targets
 IMG ?= ocs-osd-deployer:latest
+
+# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
+USE_IMAGE_DIGESTS ?= false
+ifeq ($(USE_IMAGE_DIGESTS), true)
+    BUNDLE_GEN_FLAGS += --use-image-digests
+endif
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.23
@@ -209,7 +216,7 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 		$(KUSTOMIZE) edit add annotation --force 'olm.skipRange':">=0.0.1 <$(VERSION)" && \
 		$(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion \
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
 	$(OPERATOR_SDK) bundle validate $(OUTPUT_DIR)
 
