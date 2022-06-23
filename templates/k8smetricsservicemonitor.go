@@ -47,11 +47,13 @@ var K8sMetricsServiceMonitorTemplate = promv1.ServiceMonitor{
 				ScrapeTimeout: "1m",
 				Interval:      "2m",
 				HonorLabels:   true,
-				RelabelConfigs: []*promv1.RelabelConfig{
+				MetricRelabelConfigs: []*promv1.RelabelConfig{
 					{
 						Action: "labeldrop",
 						Regex:  "prometheus_replica",
 					},
+				},
+				RelabelConfigs: []*promv1.RelabelConfig{
 					{
 						Action:      "replace",
 						Regex:       "prometheus-k8s-.*",
