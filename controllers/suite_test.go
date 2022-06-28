@@ -65,23 +65,20 @@ var (
 )
 
 const (
-	testPrimaryNamespace                       = "primary"
-	testSecondaryNamespace                     = "secondary"
-	testAddonParamsSecretName                  = "test-addon-secret"
-	testPagerdutySecretName                    = "test-pagerduty-secret"
-	testDeadMansSnitchSecretName               = "test-deadmanssnitch-secret"
-	testSMTPSecretName                         = "test-smtp-secret"
-	testAddonConfigMapName                     = "test-addon-configmap"
-	testAddonConfigMapDeleteLabelKey           = "test-addon-configmap-delete-label-key"
-	testDeployerCSVName                        = "ocs-osd-deployer.x.y.z"
-	testGrafanaFederateSecretName              = "grafana-datasources"
-	testK8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
-	testOpenshiftMonitoringNamespace           = "openshift-monitoring"
-	testCustomerNotificationHTMLPath           = "../templates/customernotification.html"
-	testDeploymentTypeEnvVarName               = "DEPLOYMENT_TYPE"
-	testRHOBSEndpointEnvVarName                = "RHOBS_ENDPOINT"
-	testRHssoTokenEndpointEnvVarName           = "RH_SSO_TOKEN_ENDPOINT"
-	testRHOBSSecretName                        = "test-addon-prom-remote-write"
+	testPrimaryNamespace             = "primary"
+	testSecondaryNamespace           = "secondary"
+	testAddonParamsSecretName        = "test-addon-secret"
+	testPagerdutySecretName          = "test-pagerduty-secret"
+	testDeadMansSnitchSecretName     = "test-deadmanssnitch-secret"
+	testSMTPSecretName               = "test-smtp-secret"
+	testAddonConfigMapName           = "test-addon-configmap"
+	testAddonConfigMapDeleteLabelKey = "test-addon-configmap-delete-label-key"
+	testDeployerCSVName              = "ocs-osd-deployer.x.y.z"
+	testCustomerNotificationHTMLPath = "../templates/customernotification.html"
+	testDeploymentTypeEnvVarName     = "DEPLOYMENT_TYPE"
+	testRHOBSEndpointEnvVarName      = "RHOBS_ENDPOINT"
+	testRHssoTokenEndpointEnvVarName = "RH_SSO_TOKEN_ENDPOINT"
+	testRHOBSSecretName              = "test-addon-prom-remote-write"
 )
 
 func TestAPIs(t *testing.T) {
@@ -215,10 +212,6 @@ var _ = BeforeSuite(func() {
 		secondaryNS := &corev1.Namespace{}
 		secondaryNS.Name = testSecondaryNamespace
 		Expect(k8sClient.Create(ctx, secondaryNS)).Should(Succeed())
-
-		openshiftMonitoringNS := &corev1.Namespace{}
-		openshiftMonitoringNS.Name = testOpenshiftMonitoringNamespace
-		Expect(k8sClient.Create(ctx, openshiftMonitoringNS)).Should(Succeed())
 
 		// Create a mock MCG CSV
 		mcgCSV := &opv1a1.ClusterServiceVersion{}

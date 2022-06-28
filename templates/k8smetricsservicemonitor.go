@@ -14,7 +14,6 @@ package templates
 
 import (
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,8 +33,6 @@ var params = map[string][]string{
 		"{__name__='node_disk_writes_completed_total'}",
 	},
 }
-
-var k8sMetricsServiceMonitorAuthSecret = "k8s-metrics-service-monitor-auth"
 
 var K8sMetricsServiceMonitorTemplate = promv1.ServiceMonitor{
 	Spec: promv1.ServiceMonitorSpec{
@@ -69,21 +66,8 @@ var K8sMetricsServiceMonitorTemplate = promv1.ServiceMonitor{
 						InsecureSkipVerify: true,
 					},
 				},
-				Params: params,
-				BasicAuth: &promv1.BasicAuth{
-					Username: corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: k8sMetricsServiceMonitorAuthSecret,
-						},
-						Key: "Username",
-					},
-					Password: corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: k8sMetricsServiceMonitorAuthSecret,
-						},
-						Key: "Password",
-					},
-				},
+				Params:          params,
+				BearerTokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token",
 			},
 		},
 		NamespaceSelector: promv1.NamespaceSelector{

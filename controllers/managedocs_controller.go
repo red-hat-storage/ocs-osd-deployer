@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -68,47 +67,43 @@ const (
 )
 
 const (
-	managedOCSName                         = "managedocs"
-	storageClusterName                     = "ocs-storagecluster"
-	prometheusName                         = "managed-ocs-prometheus"
-	prometheusServiceName                  = "prometheus"
-	alertmanagerName                       = "managed-ocs-alertmanager"
-	alertmanagerConfigName                 = "managed-ocs-alertmanager-config"
-	dmsRuleName                            = "dms-monitor-rule"
-	storageSizeKey                         = "size"
-	storageUnitKey                         = "unit"
-	onboardingTicketKey                    = "onboarding-ticket"
-	storageProviderEndpointKey             = "storage-provider-endpoint"
-	enableMCGKey                           = "enable-mcg"
-	notificationEmailKeyPrefix             = "notification-email"
-	onboardingValidationKey                = "onboarding-validation-key"
-	deviceSetName                          = "default"
-	storageClassRbdName                    = "ocs-storagecluster-ceph-rbd"
-	storageClassCephFSName                 = "ocs-storagecluster-cephfs"
-	deployerCSVPrefix                      = "ocs-osd-deployer"
-	ocsOperatorName                        = "ocs-operator"
-	mcgOperatorName                        = "mcg-operator"
-	egressNetworkPolicyName                = "egress-rule"
-	ingressNetworkPolicyName               = "ingress-rule"
-	cephIngressNetworkPolicyName           = "ceph-ingress-rule"
-	providerApiServerNetworkPolicyName     = "provider-api-server-rule"
-	prometheusProxyNetworkPolicyName       = "prometheus-proxy-rule"
-	monLabelKey                            = "app"
-	monLabelValue                          = "managed-ocs"
-	rookConfigMapName                      = "rook-ceph-operator-config"
-	k8sMetricsServiceMonitorName           = "k8s-metrics-service-monitor"
-	grafanaDatasourceSecretName            = "grafana-datasources"
-	grafanaDatasourceSecretKey             = "prometheus.yaml"
-	k8sMetricsServiceMonitorAuthSecretName = "k8s-metrics-service-monitor-auth"
-	openshiftMonitoringNamespace           = "openshift-monitoring"
-	alertRelabelConfigSecretName           = "managed-ocs-alert-relabel-config-secret"
-	alertRelabelConfigSecretKey            = "alertrelabelconfig.yaml"
-	onboardingValidationKeySecretName      = "onboarding-ticket-key"
-	convergedDeploymentType                = "converged"
-	consumerDeploymentType                 = "consumer"
-	providerDeploymentType                 = "provider"
-	rhobsRemoteWriteConfigIdSecretKey      = "prom-remote-write-config-id"
-	rhobsRemoteWriteConfigSecretName       = "prom-remote-write-config-secret"
+	managedOCSName                     = "managedocs"
+	storageClusterName                 = "ocs-storagecluster"
+	prometheusName                     = "managed-ocs-prometheus"
+	prometheusServiceName              = "prometheus"
+	alertmanagerName                   = "managed-ocs-alertmanager"
+	alertmanagerConfigName             = "managed-ocs-alertmanager-config"
+	dmsRuleName                        = "dms-monitor-rule"
+	storageSizeKey                     = "size"
+	storageUnitKey                     = "unit"
+	onboardingTicketKey                = "onboarding-ticket"
+	storageProviderEndpointKey         = "storage-provider-endpoint"
+	enableMCGKey                       = "enable-mcg"
+	notificationEmailKeyPrefix         = "notification-email"
+	onboardingValidationKey            = "onboarding-validation-key"
+	deviceSetName                      = "default"
+	storageClassRbdName                = "ocs-storagecluster-ceph-rbd"
+	storageClassCephFSName             = "ocs-storagecluster-cephfs"
+	deployerCSVPrefix                  = "ocs-osd-deployer"
+	ocsOperatorName                    = "ocs-operator"
+	mcgOperatorName                    = "mcg-operator"
+	egressNetworkPolicyName            = "egress-rule"
+	ingressNetworkPolicyName           = "ingress-rule"
+	cephIngressNetworkPolicyName       = "ceph-ingress-rule"
+	providerApiServerNetworkPolicyName = "provider-api-server-rule"
+	prometheusProxyNetworkPolicyName   = "prometheus-proxy-rule"
+	monLabelKey                        = "app"
+	monLabelValue                      = "managed-ocs"
+	rookConfigMapName                  = "rook-ceph-operator-config"
+	k8sMetricsServiceMonitorName       = "k8s-metrics-service-monitor"
+	alertRelabelConfigSecretName       = "managed-ocs-alert-relabel-config-secret"
+	alertRelabelConfigSecretKey        = "alertrelabelconfig.yaml"
+	onboardingValidationKeySecretName  = "onboarding-ticket-key"
+	convergedDeploymentType            = "converged"
+	consumerDeploymentType             = "consumer"
+	providerDeploymentType             = "provider"
+	rhobsRemoteWriteConfigIdSecretKey  = "prom-remote-write-config-id"
+	rhobsRemoteWriteConfigSecretName   = "prom-remote-write-config-secret"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -132,31 +127,30 @@ type ManagedOCSReconciler struct {
 	RHOBSEndpoint                string
 	RHSSOTokenEndpoint           string
 
-	ctx                                context.Context
-	managedOCS                         *v1.ManagedOCS
-	storageCluster                     *ocsv1.StorageCluster
-	egressNetworkPolicy                *openshiftv1.EgressNetworkPolicy
-	ingressNetworkPolicy               *netv1.NetworkPolicy
-	cephIngressNetworkPolicy           *netv1.NetworkPolicy
-	providerAPIServerNetworkPolicy     *netv1.NetworkPolicy
-	prometheusProxyNetworkPolicy       *netv1.NetworkPolicy
-	prometheus                         *promv1.Prometheus
-	prometheusService                  *corev1.Service
-	dmsRule                            *promv1.PrometheusRule
-	alertmanager                       *promv1.Alertmanager
-	pagerdutySecret                    *corev1.Secret
-	deadMansSnitchSecret               *corev1.Secret
-	smtpSecret                         *corev1.Secret
-	alertmanagerConfig                 *promv1a1.AlertmanagerConfig
-	alertRelabelConfigSecret           *corev1.Secret
-	k8sMetricsServiceMonitor           *promv1.ServiceMonitor
-	k8sMetricsServiceMonitorAuthSecret *corev1.Secret
-	namespace                          string
-	reconcileStrategy                  v1.ReconcileStrategy
-	addonParams                        map[string]string
-	onboardingValidationKeySecret      *corev1.Secret
-	prometheusKubeRBACConfigMap        *corev1.ConfigMap
-	rhobsRemoteWriteConfigSecret       *corev1.Secret
+	ctx                            context.Context
+	managedOCS                     *v1.ManagedOCS
+	storageCluster                 *ocsv1.StorageCluster
+	egressNetworkPolicy            *openshiftv1.EgressNetworkPolicy
+	ingressNetworkPolicy           *netv1.NetworkPolicy
+	cephIngressNetworkPolicy       *netv1.NetworkPolicy
+	providerAPIServerNetworkPolicy *netv1.NetworkPolicy
+	prometheusProxyNetworkPolicy   *netv1.NetworkPolicy
+	prometheus                     *promv1.Prometheus
+	prometheusService              *corev1.Service
+	dmsRule                        *promv1.PrometheusRule
+	alertmanager                   *promv1.Alertmanager
+	pagerdutySecret                *corev1.Secret
+	deadMansSnitchSecret           *corev1.Secret
+	smtpSecret                     *corev1.Secret
+	alertmanagerConfig             *promv1a1.AlertmanagerConfig
+	alertRelabelConfigSecret       *corev1.Secret
+	k8sMetricsServiceMonitor       *promv1.ServiceMonitor
+	namespace                      string
+	reconcileStrategy              v1.ReconcileStrategy
+	addonParams                    map[string]string
+	onboardingValidationKeySecret  *corev1.Secret
+	prometheusKubeRBACConfigMap    *corev1.ConfigMap
+	rhobsRemoteWriteConfigSecret   *corev1.Secret
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -432,10 +426,6 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.k8sMetricsServiceMonitor.Name = k8sMetricsServiceMonitorName
 	r.k8sMetricsServiceMonitor.Namespace = r.namespace
 
-	r.k8sMetricsServiceMonitorAuthSecret = &corev1.Secret{}
-	r.k8sMetricsServiceMonitorAuthSecret.Name = k8sMetricsServiceMonitorAuthSecretName
-	r.k8sMetricsServiceMonitorAuthSecret.Namespace = r.namespace
-
 	r.alertRelabelConfigSecret = &corev1.Secret{}
 	r.alertRelabelConfigSecret.Name = alertRelabelConfigSecretName
 	r.alertRelabelConfigSecret.Namespace = r.namespace
@@ -563,9 +553,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileAlertmanagerConfig(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileK8SMetricsServiceMonitorAuthSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileK8SMetricsServiceMonitor(); err != nil {
@@ -1296,100 +1283,6 @@ func (r *ManagedOCSReconciler) reconcileAlertmanagerConfig() error {
 	return err
 }
 
-func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitorAuthSecret() error {
-	r.Log.Info("Reconciling k8sMetricsServiceMonitorAuthSecret")
-
-	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.k8sMetricsServiceMonitorAuthSecret, func() error {
-		if err := r.own(r.k8sMetricsServiceMonitorAuthSecret); err != nil {
-			return err
-		}
-		auth, err := r.readGrafanaV1Secret()
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.Log.Info("Unable to find v1 grafana-datasources secret")
-				auth, err = r.readGrafanaV2Secret()
-			}
-			if err != nil {
-				return fmt.Errorf("Unable to find grafana-datasources secret: %v", err)
-			}
-		}
-		r.k8sMetricsServiceMonitorAuthSecret.Data = auth
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("Failed to update k8sMetricsServiceMonitorAuthSecret: %v", err)
-	}
-	return nil
-}
-
-func (r *ManagedOCSReconciler) readGrafanaV1Secret() (map[string][]byte, error) {
-	secret := &corev1.Secret{}
-	secret.Name = grafanaDatasourceSecretName
-	secret.Namespace = openshiftMonitoringNamespace
-	if err := r.unrestrictedGet(secret); err != nil {
-		return nil, err
-	}
-	authInfoStructure := struct {
-		DataSources []struct {
-			BasicAuthPassword string `json:"basicAuthPassword"`
-			BasicAuthUser     string `json:"basicAuthUser"`
-		} `json:"datasources"`
-	}{}
-	if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
-		return nil, err
-	}
-	var authDetails map[string][]byte = nil
-	for key := range authInfoStructure.DataSources {
-		ds := &authInfoStructure.DataSources[key]
-		if ds.BasicAuthUser == "internal" && ds.BasicAuthPassword != "" {
-			authDetails = map[string][]byte{
-				"Username": []byte(ds.BasicAuthUser),
-				"Password": []byte(ds.BasicAuthPassword),
-			}
-			break
-		}
-	}
-	if authDetails == nil {
-		return nil, fmt.Errorf("grafana-datasources does not contain required credentials")
-	}
-	return authDetails, nil
-}
-
-func (r *ManagedOCSReconciler) readGrafanaV2Secret() (map[string][]byte, error) {
-	secret := &corev1.Secret{}
-	secret.Name = "grafana-datasources-v2"
-	secret.Namespace = openshiftMonitoringNamespace
-	if err := r.unrestrictedGet(secret); err != nil {
-		return nil, err
-	}
-	authInfoStructure := struct {
-		DataSources []struct {
-			SecureJsonData struct {
-				BasicAuthPassword string `json:"basicAuthPassword"`
-			} `json:"secureJsonData"`
-			BasicAuthUser string `json:"basicAuthUser"`
-		} `json:"datasources"`
-	}{}
-	if err := json.Unmarshal(secret.Data[grafanaDatasourceSecretKey], &authInfoStructure); err != nil {
-		return nil, err
-	}
-	var authDetails map[string][]byte = nil
-	for key := range authInfoStructure.DataSources {
-		ds := &authInfoStructure.DataSources[key]
-		if ds.BasicAuthUser == "internal" && ds.SecureJsonData.BasicAuthPassword != "" {
-			authDetails = map[string][]byte{
-				"Username": []byte(ds.BasicAuthUser),
-				"Password": []byte(ds.SecureJsonData.BasicAuthPassword),
-			}
-			break
-		}
-	}
-	if authDetails == nil {
-		return nil, fmt.Errorf("grafana-datasources-v2 does not contain required credentials")
-	}
-	return authDetails, nil
-}
-
 func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitor() error {
 	r.Log.Info("Reconciling k8sMetricsServiceMonitor")
 
@@ -1899,11 +1792,6 @@ func (r *ManagedOCSReconciler) getCSVByPrefix(name string) (*opv1a1.ClusterServi
 		}
 	}
 	return nil, errors.NewNotFound(opv1a1.Resource("csv"), fmt.Sprintf("unable to find a csv prefixed with %s", name))
-}
-
-func (r *ManagedOCSReconciler) unrestrictedGet(obj client.Object) error {
-	key := client.ObjectKeyFromObject(obj)
-	return r.UnrestrictedClient.Get(r.ctx, key, obj)
 }
 
 func findStorageDeviceSet(storageDeviceSets []ocsv1.StorageDeviceSet, deviceSetName string) *ocsv1.StorageDeviceSet {
