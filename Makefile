@@ -176,7 +176,7 @@ bundle: manifests kustomize operator-sdk
 		$(KUSTOMIZE) create --resources ocs-osd-deployer.clusterserviceversion.yaml && \
 		$(KUSTOMIZE) edit add annotation --force 'olm.skipRange':">=0.0.1 <$(VERSION)" && \
 		$(KUSTOMIZE) edit add patch --name ocs-osd-deployer.v0.0.0 --kind ClusterServiceVersion \
-		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
+		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "ocs-osd-deployer.v$(REPLACES)"}]'
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --extra-service-accounts prometheus-k8s --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) $(BUNDLE_FLAGS)
 	cp config/metadata/* $(OUTPUT_DIR)/metadata/
 	$(OPERATOR_SDK) bundle validate $(OUTPUT_DIR)
