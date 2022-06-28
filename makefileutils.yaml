@@ -73,16 +73,3 @@ spec:
                     image: gcr.io/kubebuilder/kube-rbac-proxy:v0.11.0
     strategy: deployment
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: openshift-monitoring
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: grafana-datasources-v2
-  namespace: openshift-monitoring
-type: Opaque
-data:
-  prometheus.yaml: ewogICAgImRhdGFzb3VyY2VzIjogWwogICAgICAgIHsKICAgICAgICAgICAgInNlY3VyZUpzb25EYXRhIjogewogICAgICAgICAgICAgICAgImJhc2ljQXV0aFBhc3N3b3JkIjogInRlc3QiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJiYXNpY0F1dGhVc2VyIjogImludGVybmFsIgogICAgICAgIH0KICAgIF0KfQ==

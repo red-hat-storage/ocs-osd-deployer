@@ -288,33 +288,9 @@ var _ = Describe("ManagedOCS controller", func() {
 			Namespace: testPrimaryNamespace,
 		},
 	}
-	var grafanaDatasources struct {
-		Datasources [1]struct {
-			BasicAuthPassword string `json:"basicAuthPassword"`
-			BasicAuthUser     string `json:"basicAuthUser"`
-		} `json:"datasources"`
-	}
-	grafanaDatasources.Datasources[0].BasicAuthPassword = "password"
-	grafanaDatasources.Datasources[0].BasicAuthUser = "internal"
-	grafanaDatasourceSecretTemplate := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      testGrafanaFederateSecretName,
-			Namespace: testOpenshiftMonitoringNamespace,
-		},
-		Data: map[string][]byte{
-			"prometheus.yaml": utils.ToJsonOrDie(grafanaDatasources),
-		},
-	}
-	k8sMetricsServiceMonitorAuthSecretTemplate := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      testK8sMetricsServiceMonitorAuthSecretName,
-			Namespace: testPrimaryNamespace,
-		},
-		StringData: map[string]string{},
-	}
 	k8sMetricsServiceMonitorTemplate := promv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "k8s-metrics-service-monitor",
+			Name:      k8sMetricsServiceMonitorName,
 			Namespace: testPrimaryNamespace,
 		},
 	}
@@ -1360,16 +1336,11 @@ var _ = Describe("ManagedOCS controller", func() {
 				utils.WaitForResource(k8sClient, ctx, amConfigTemplate.DeepCopy(), timeout, interval)
 			})
 		})
-		When("a Grafana datasources secret exists in the openshift-monitoring namespace", func() {
-			It("should create k8sMetricsServiceMonitorAuthSecret in primary namespace", func() {
-				grafanaSecret := grafanaDatasourceSecretTemplate.DeepCopy()
-				Expect(k8sClient.Create(ctx, grafanaSecret)).Should(Succeed())
-				// Check for federate-basic-auth secret in primary namespace
-				utils.WaitForResource(k8sClient, ctx, k8sMetricsServiceMonitorAuthSecretTemplate.DeepCopy(), timeout, interval)
-			})
-		})
 		When("k8sMetricsServiceMonitor is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
+				// Wait for the resource to be created
+				utils.WaitForResource(k8sClient, ctx, k8sMetricsServiceMonitorTemplate.DeepCopy(), timeout, interval)
+
 				sm := k8sMetricsServiceMonitorTemplate.DeepCopy()
 				smKey := utils.GetResourceKey(sm)
 				Expect(k8sClient.Get(ctx, smKey, sm)).Should(Succeed())
