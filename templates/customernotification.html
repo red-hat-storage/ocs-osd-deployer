@@ -38,7 +38,7 @@
         {{ range .Alerts.Firing }}
             {{ if .Labels.persistentvolumeclaim }}
                 <li>PVC Name: {{ .Labels.persistentvolumeclaim }}</li>
-                <li>Namespace: {{ .Labels.namespace }}
+                <li>Namespace: {{ .Labels.alertnamespace }}
             {{ end }}
         {{ end }}
 
