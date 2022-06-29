@@ -923,12 +923,19 @@ func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 		}
 
 		alertRelabelConfig := []struct {
-			TargetLabel string `yaml:"target_label,omitempty"`
-			Replacement string `yaml:"replacement,omitempty"`
-		}{{
-			TargetLabel: "namespace",
-			Replacement: r.namespace,
-		}}
+			SourceLabels []string `yaml:"source_labels"`
+			TargetLabel  string   `yaml:"target_label,omitempty"`
+			Replacement  string   `yaml:"replacement,omitempty"`
+		}{
+			{
+				SourceLabels: []string{"namespace"},
+				TargetLabel:  "alertnamespace",
+			},
+			{
+				TargetLabel: "namespace",
+				Replacement: r.namespace,
+			},
+		}
 
 		config, err := yaml.Marshal(alertRelabelConfig)
 		if err != nil {
