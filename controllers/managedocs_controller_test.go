@@ -1356,18 +1356,23 @@ var _ = Describe("ManagedOCS controller", func() {
 		When("k8sMetricsServiceMonitor is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
 				// Wait for the resource to be created
-				utils.WaitForResource(k8sClient, ctx, k8sMetricsServiceMonitorTemplate.DeepCopy(), timeout, interval)
-
 				sm := k8sMetricsServiceMonitorTemplate.DeepCopy()
-				smKey := utils.GetResourceKey(sm)
-				Expect(k8sClient.Get(ctx, smKey, sm)).Should(Succeed())
+				utils.WaitForResource(k8sClient, ctx, sm, timeout, interval)
+
 				// Update the spec
 				spec := sm.Spec.DeepCopy()
 				sm.Spec = promv1.ServiceMonitorSpec{
 					Endpoints: []promv1.Endpoint{},
 				}
-				Expect(k8sClient.Update(ctx, sm)).Should(Succeed())
+
+				// Contention of test and reconilcer updating the resource is observed
+				// try for successful update of resource before checking for revert
+				Eventually(func() error {
+					return k8sClient.Update(ctx, sm)
+				}, timeout, interval).Should(Succeed())
+
 				// Wait for the spec changes to be reverted
+				smKey := utils.GetResourceKey(sm)
 				Eventually(func() *promv1.ServiceMonitorSpec {
 					sm := k8sMetricsServiceMonitorTemplate.DeepCopy()
 					Expect(k8sClient.Get(ctx, smKey, sm)).Should(Succeed())
