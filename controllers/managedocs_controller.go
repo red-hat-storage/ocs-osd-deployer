@@ -525,22 +525,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.addonParams[storageUnitKey] = "Ti"
 		}
 
-		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileEgressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-
 		// Reconcile the different resources
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
@@ -583,6 +567,21 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSInitialization(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileEgressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
 
