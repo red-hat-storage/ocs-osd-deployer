@@ -17,6 +17,12 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -66,4 +72,34 @@ func MapItems(source []string, transform func(string) string) []string {
 		target[i] = transform(source[i])
 	}
 	return target
+}
+
+func Retry(attempts int, sleep time.Duration, f func() error) error {
+	var err error
+	for i := 0; ; i++ {
+		if err = f(); err == nil {
+			return nil
+		}
+		if i >= (attempts - 1) {
+			break
+		}
+		time.Sleep(sleep)
+		log.Println("retrying after error:", err)
+	}
+	return fmt.Errorf("Failed after %d retries. Last error: %v", attempts, err)
+
+}
+
+func HTTPGetAndParseBody(endpoint string) (string, error) {
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("Failed to get %s: %v", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("Failed to read response body: %v", err)
+	}
+	return string(body), nil
 }

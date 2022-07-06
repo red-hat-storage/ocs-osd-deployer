@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - command:
-        - /bin/awsDataGather
+        - /awsDataGather
         image: controller:latest
         name: aws-data-gather
         env:

@@ -526,22 +526,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			r.addonParams[storageUnitKey] = "Ti"
 		}
 
-		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileEgressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
-
 		// Reconcile the different resources
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
@@ -584,6 +568,21 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSInitialization(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileEgressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCephIngressNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -1473,12 +1472,9 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 
 		if r.DeploymentType != convergedDeploymentType {
 			// Get the aws config map
-			awsConfigMap := corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      aws.DataConfigMapName,
-					Namespace: r.namespace,
-				},
-			}
+			awsConfigMap := corev1.ConfigMap{}
+			awsConfigMap.Name = aws.DataConfigMapName
+			awsConfigMap.Namespace = r.namespace
 			if err := r.get(&awsConfigMap); err != nil {
 				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
 			}
@@ -1496,6 +1492,10 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 				},
 			}
 
+			// Inserting the VPC Egress rule in front of all other egress rules.
+			// The order or rules matter
+			// https://docs.openshift.com/container-platform/4.10/networking/openshift_sdn/configuring-egress-firewall.html#policy-rule-order_openshift-sdn-egress-firewall
+			// Inserting this rule in the front ensures it comes before the EgressNetworkPolicyRuleDeny rule.
 			desired.Spec.Egress = append(
 				[]openshiftv1.EgressNetworkPolicyRule{
 					vpcEgressRule,

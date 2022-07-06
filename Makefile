@@ -159,7 +159,6 @@ export DEPLOYMENT_TYPE = converged
 export RHOBS_ENDPOINT = test
 export RH_SSO_TOKEN_ENDPOINT = test
 
-<<<<<<< HEAD
 .PHONY: run
 run: generate fmt vet manifests export_env_vars ## Run a controller from your host.
 	kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -

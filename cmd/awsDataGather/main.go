@@ -23,7 +23,7 @@ func main() {
 	namespace, found := os.LookupEnv("NAMESPACE")
 	if !found {
 		fmt.Fprintf(os.Stderr,
-			"NAMESPACE environment variabled not found\n")
+			"NAMESPACE environment variable not found\n")
 		os.Exit(1)
 	}
 
@@ -41,6 +41,7 @@ func main() {
 	err = aws.GatherData(aws.IMDSv1Server, k8sClient, namespace, log)
 	if err != nil {
 		log.Error(err, "error running aws data gather")
+		os.Exit(1)
 	}
 
 	log.Info("AWS data gathering successfully completed!")
