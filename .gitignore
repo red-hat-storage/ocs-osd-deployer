@@ -32,3 +32,6 @@ config/manager/kustomization.yaml
 *.swo
 *~
 .vscode
+
+# Ignore local bundle changes
+config/manifests/bases/kustomization.yaml
