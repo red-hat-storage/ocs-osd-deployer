@@ -1,16 +1,11 @@
 package aws
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -20,7 +15,9 @@ const (
 	CidrKey           = "vpc-cidr"
 )
 
-func GatherData(imdsServerAddr string, k8sClient client.Client, namespace string, log logr.Logger) error {
+func GatherData(imdsServerAddr string, log logr.Logger) (map[string]string, error) {
+	var data map[string]string = map[string]string{}
+
 	// A mac address for one of the interfaces on the instance is needed
 	// to query for the VPC CIDR block.
 	log.Info("Determining mac address on instance")
@@ -34,7 +31,7 @@ func GatherData(imdsServerAddr string, k8sClient client.Client, namespace string
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to find mac address of instance")
+		return nil, fmt.Errorf("failed to find mac address of instance")
 	}
 	log.Info("MAC address found.", "mac", mac)
 
@@ -50,24 +47,11 @@ func GatherData(imdsServerAddr string, k8sClient client.Client, namespace string
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("Failed to find VPC CIDR using mac address %q", mac)
+		return nil, fmt.Errorf("Failed to find VPC CIDR using mac address %q", mac)
 	}
 	log.Info("VPC CIDR found.", "vpc-cidr", cidr)
 
-	log.Info("Creating Config Map with AWS data")
-	configMap := corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DataConfigMapName,
-			Namespace: namespace,
-		},
-		Data: map[string]string{},
-	}
-	_, err = ctrl.CreateOrUpdate(context.Background(), k8sClient, &configMap, func() error {
-		configMap.Data[CidrKey] = cidr
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("Failed to create configmap: %v", err)
-	}
-	return nil
+	data[CidrKey] = cidr
+
+	return data, nil
 }
