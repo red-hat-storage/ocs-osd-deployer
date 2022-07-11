@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -26,6 +28,12 @@ func main() {
 			"NAMESPACE environment variable not found\n")
 		os.Exit(1)
 	}
+	podName, found := os.LookupEnv("NAME")
+	if !found {
+		fmt.Fprintf(os.Stderr,
+			"NAME environment variable not found\n")
+		os.Exit(1)
+	}
 
 	log.Info("Setting up k8s client")
 	var options client.Options
@@ -38,9 +46,40 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = aws.GatherData(aws.IMDSv1Server, k8sClient, namespace, log)
+	// Need to get the pod resource that is running
+	// This will later be used as the ControllerReference for the data ConfigMap
+	var pod corev1.Pod
+	err = k8sClient.Get(context.Background(), client.ObjectKey{
+		Name:      podName,
+		Namespace: namespace,
+	}, &pod)
+	if err != nil {
+		log.Error(err, "Failed to find pod '%s' in namespace '%s'", podName, namespace)
+		os.Exit(1)
+	}
+
+	log.Info("Gathering AWS data")
+	awsData, err := aws.GatherData(aws.IMDSv1Server, log)
 	if err != nil {
 		log.Error(err, "error running aws data gather")
+		os.Exit(1)
+	}
+
+	log.Info("Creating Config Map with AWS data")
+	configMap := corev1.ConfigMap{}
+	configMap.Name = aws.DataConfigMapName
+	configMap.Namespace = namespace
+	_, err = ctrl.CreateOrUpdate(context.Background(), k8sClient, &configMap, func() error {
+		if err := ctrl.SetControllerReference(&pod, &configMap, options.Scheme); err != nil {
+			return err
+		}
+		configMap.Data = map[string]string{
+			aws.CidrKey: awsData[aws.CidrKey],
+		}
+		return nil
+	})
+	if err != nil {
+		log.Error(err, "Failed to create configmap")
 		os.Exit(1)
 	}
 
