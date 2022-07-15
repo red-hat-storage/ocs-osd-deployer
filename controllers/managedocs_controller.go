@@ -38,7 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,7 +69,6 @@ const (
 	managedOCSName                     = "managedocs"
 	storageClusterName                 = "ocs-storagecluster"
 	prometheusName                     = "managed-ocs-prometheus"
-	prometheusServiceName              = "prometheus"
 	alertmanagerName                   = "managed-ocs-alertmanager"
 	alertmanagerConfigName             = "managed-ocs-alertmanager-config"
 	dmsRuleName                        = "dms-monitor-rule"
@@ -91,7 +89,6 @@ const (
 	ingressNetworkPolicyName           = "ingress-rule"
 	cephIngressNetworkPolicyName       = "ceph-ingress-rule"
 	providerApiServerNetworkPolicyName = "provider-api-server-rule"
-	prometheusProxyNetworkPolicyName   = "prometheus-proxy-rule"
 	monLabelKey                        = "app"
 	monLabelValue                      = "managed-ocs"
 	rookConfigMapName                  = "rook-ceph-operator-config"
@@ -134,9 +131,7 @@ type ManagedOCSReconciler struct {
 	ingressNetworkPolicy           *netv1.NetworkPolicy
 	cephIngressNetworkPolicy       *netv1.NetworkPolicy
 	providerAPIServerNetworkPolicy *netv1.NetworkPolicy
-	prometheusProxyNetworkPolicy   *netv1.NetworkPolicy
 	prometheus                     *promv1.Prometheus
-	prometheusService              *corev1.Service
 	dmsRule                        *promv1.PrometheusRule
 	alertmanager                   *promv1.Alertmanager
 	pagerdutySecret                *corev1.Secret
@@ -149,7 +144,6 @@ type ManagedOCSReconciler struct {
 	reconcileStrategy              v1.ReconcileStrategy
 	addonParams                    map[string]string
 	onboardingValidationKeySecret  *corev1.Secret
-	prometheusKubeRBACConfigMap    *corev1.ConfigMap
 	rhobsRemoteWriteConfigSecret   *corev1.Secret
 }
 
@@ -167,7 +161,6 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={persistentvolumes,secrets},verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources={services},verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
@@ -269,8 +262,6 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 		Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
 		Owns(&corev1.Secret{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.ConfigMap{}).
 
 		// Watch non-owned resources
 		Watches(
@@ -386,17 +377,9 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.providerAPIServerNetworkPolicy.Name = providerApiServerNetworkPolicyName
 	r.providerAPIServerNetworkPolicy.Namespace = r.namespace
 
-	r.prometheusProxyNetworkPolicy = &netv1.NetworkPolicy{}
-	r.prometheusProxyNetworkPolicy.Name = prometheusProxyNetworkPolicyName
-	r.prometheusProxyNetworkPolicy.Namespace = r.namespace
-
 	r.prometheus = &promv1.Prometheus{}
 	r.prometheus.Name = prometheusName
 	r.prometheus.Namespace = r.namespace
-
-	r.prometheusService = &corev1.Service{}
-	r.prometheusService.Name = prometheusServiceName
-	r.prometheusService.Namespace = r.namespace
 
 	r.dmsRule = &promv1.PrometheusRule{}
 	r.dmsRule.Name = dmsRuleName
@@ -433,10 +416,6 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.onboardingValidationKeySecret = &corev1.Secret{}
 	r.onboardingValidationKeySecret.Name = onboardingValidationKeySecretName
 	r.onboardingValidationKeySecret.Namespace = r.namespace
-
-	r.prometheusKubeRBACConfigMap = &corev1.ConfigMap{}
-	r.prometheusKubeRBACConfigMap.Name = templates.PrometheusKubeRBACPoxyConfigMapName
-	r.prometheusKubeRBACConfigMap.Namespace = r.namespace
 
 	r.rhobsRemoteWriteConfigSecret = &corev1.Secret{}
 	r.rhobsRemoteWriteConfigSecret.Name = r.RHOBSSecretName
@@ -540,12 +519,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcileAlertRelabelConfigSecret(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcilePrometheusKubeRBACConfigMap(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcilePrometheusService(); err != nil {
-			return ctrl.Result{}, err
-		}
 		if err := r.reconcilePrometheus(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -565,9 +538,6 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSInitialization(); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileEgressNetworkPolicy(); err != nil {
@@ -943,65 +913,6 @@ func (r *ManagedOCSReconciler) reconcileAlertRelabelConfigSecret() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) reconcilePrometheusKubeRBACConfigMap() error {
-	r.Log.Info("Reconciling kubeRBACConfigMap")
-
-	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.prometheusKubeRBACConfigMap, func() error {
-		if err := r.own(r.prometheusKubeRBACConfigMap); err != nil {
-			return err
-		}
-
-		r.prometheusKubeRBACConfigMap.Data = templates.KubeRBACProxyConfigMap.DeepCopy().Data
-
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("unable to create kubeRBACConfig config map: %v", err)
-	}
-
-	return nil
-}
-
-// reconcilePrometheusService function wait for prometheus Service
-// to start and sets appropriate annotation for 'service-ca' controller
-func (r *ManagedOCSReconciler) reconcilePrometheusService() error {
-	r.Log.Info("Reconciling PrometheusService")
-
-	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.prometheusService, func() error {
-		if err := r.own(r.prometheusService); err != nil {
-			return err
-		}
-
-		r.prometheusService.Spec.Ports = []corev1.ServicePort{
-			{
-				Name:       "https",
-				Protocol:   corev1.ProtocolTCP,
-				Port:       int32(templates.KubeRBACProxyPortNumber),
-				TargetPort: intstr.FromString("https"),
-			},
-		}
-		r.prometheusService.Spec.Selector = map[string]string{
-			"app.kubernetes.io/name": r.prometheusService.Name,
-		}
-		utils.AddAnnotation(
-			r.prometheusService,
-			"service.beta.openshift.io/serving-cert-secret-name",
-			templates.PrometheusServingCertSecretName,
-		)
-		utils.AddAnnotation(
-			r.prometheusService,
-			"service.alpha.openshift.io/serving-cert-secret-name",
-			templates.PrometheusServingCertSecretName,
-		)
-		// This label is required to enable us to use metrics federation
-		// mechanism provided by Managed-tenants
-		utils.AddLabel(r.prometheusService, monLabelKey, monLabelValue)
-		return nil
-	})
-	return err
-}
-
 func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 	r.Log.Info("Reconciling Prometheus")
 
@@ -1012,39 +923,6 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 
 		desired := templates.PrometheusTemplate.DeepCopy()
 		utils.AddLabel(r.prometheus, monLabelKey, monLabelValue)
-
-		// use the container image of kube-rbac-proxy that comes in deployer CSV
-		// for prometheus kube-rbac-proxy sidecar
-		deployerCSV, err := r.getCSVByPrefix(deployerCSVPrefix)
-		if err != nil {
-			return fmt.Errorf("Unable to set image for kube-rbac-proxy container: %v", err)
-		}
-
-		deployerCSVDeployments := deployerCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs
-		var deployerCSVDeployment *opv1a1.StrategyDeploymentSpec = nil
-		for key := range deployerCSVDeployments {
-			deployment := &deployerCSVDeployments[key]
-			if deployment.Name == "ocs-osd-controller-manager" {
-				deployerCSVDeployment = deployment
-			}
-		}
-
-		deployerCSVContainers := deployerCSVDeployment.Spec.Template.Spec.Containers
-		var kubeRbacImage string
-		for key := range deployerCSVContainers {
-			container := deployerCSVContainers[key]
-			if container.Name == "kube-rbac-proxy" {
-				kubeRbacImage = container.Image
-			}
-		}
-
-		prometheusContainers := desired.Spec.Containers
-		for key := range prometheusContainers {
-			container := &prometheusContainers[key]
-			if container.Name == "kube-rbac-proxy" {
-				container.Image = kubeRbacImage
-			}
-		}
 
 		clusterVersion := &configv1.ClusterVersion{}
 		clusterVersion.Name = "version"
@@ -1561,23 +1439,6 @@ func (r *ManagedOCSReconciler) reconcileProviderAPIServerNetworkPolicy() error {
 	})
 	if err != nil {
 		return fmt.Errorf("Failed to update provider api server NetworkPolicy: %v", err)
-	}
-	return nil
-}
-
-func (r *ManagedOCSReconciler) reconcilePrometheusProxyNetworkPolicy() error {
-	r.Log.Info("reconciling PrometheusProxyNetworkPolicy resources")
-
-	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.prometheusProxyNetworkPolicy, func() error {
-		if err := r.own(r.prometheusProxyNetworkPolicy); err != nil {
-			return err
-		}
-		desired := templates.PrometheusProxyNetworkPolicyTemplate.DeepCopy()
-		r.prometheusProxyNetworkPolicy.Spec = desired.Spec
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("Failed to update prometheus proxy NetworkPolicy: %v", err)
 	}
 	return nil
 }

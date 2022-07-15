@@ -14,7 +14,6 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v1alpha1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
-	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	utils "github.com/red-hat-storage/ocs-osd-deployer/testutils"
 	ctrlutils "github.com/red-hat-storage/ocs-osd-deployer/utils"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,18 +43,6 @@ var _ = Describe("ManagedOCS controller", func() {
 	scTemplate := ocsv1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      storageClusterName,
-			Namespace: testPrimaryNamespace,
-		},
-	}
-	prometheusKubeRBACPoxyConfigMapTemplate := corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      templates.PrometheusKubeRBACPoxyConfigMapName,
-			Namespace: testPrimaryNamespace,
-		},
-	}
-	prometheusServiceTemplate := corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusServiceName,
 			Namespace: testPrimaryNamespace,
 		},
 	}
@@ -214,12 +201,6 @@ var _ = Describe("ManagedOCS controller", func() {
 	providerApiServerIngressNetworkPolicyTemplate := netv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      providerApiServerNetworkPolicyName,
-			Namespace: testPrimaryNamespace,
-		},
-	}
-	prometheusProxyIngressNetworkPolicyTemplate := netv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusProxyNetworkPolicyName,
 			Namespace: testPrimaryNamespace,
 		},
 	}
@@ -767,12 +748,6 @@ var _ = Describe("ManagedOCS controller", func() {
 					Expect(sc.Spec.AllowRemoteStorageConsumers).Should(BeTrue())
 				}
 
-				By("Creating a kube-rbac-proxy configmap")
-				utils.WaitForResource(k8sClient, ctx, prometheusKubeRBACPoxyConfigMapTemplate.DeepCopy(), timeout, interval)
-
-				By("Creating a prometheus service resource")
-				utils.WaitForResource(k8sClient, ctx, prometheusServiceTemplate.DeepCopy(), timeout, interval)
-
 				By("Creating a prometheus resource")
 				utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
 
@@ -980,73 +955,6 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Wait for the alertRelabelConfigSecret to be recreated
 				utils.WaitForResource(k8sClient, ctx, alertRelabelConfigSecretTemplate.DeepCopy(), timeout, interval)
-			})
-		})
-		When("the kube-rbac-proxy ConfigMap is modified", func() {
-			It("should revert the changes and bring the resource back to its managed state", func() {
-				// Get an updated configMap
-				kubeRBACConfigMap := prometheusKubeRBACPoxyConfigMapTemplate.DeepCopy()
-				kubeRBACConfigMapKey := utils.GetResourceKey(kubeRBACConfigMap)
-				Expect(k8sClient.Get(ctx, kubeRBACConfigMapKey, kubeRBACConfigMap)).Should(Succeed())
-
-				// Update to the configMap with dummy values
-				data := kubeRBACConfigMap.Data
-				kubeRBACConfigMap.Data = map[string]string{}
-				Expect(k8sClient.Update(ctx, kubeRBACConfigMap)).Should(Succeed())
-
-				// Wait for the configMap changes to be reverted
-				Eventually(func() map[string]string {
-					kubeRBACConfigMap := prometheusKubeRBACPoxyConfigMapTemplate.DeepCopy()
-					Expect(k8sClient.Get(ctx, kubeRBACConfigMapKey, kubeRBACConfigMap)).Should(Succeed())
-					return kubeRBACConfigMap.Data
-				}, timeout, interval).Should(Equal(data))
-			})
-		})
-		When("the kube-rbac-proxy ConfigMap resource is deleted", func() {
-			It("should create a new kube-rbac-proxy ConfigMap in the namespace", func() {
-				// Delete the prometheusKubeRBACPoxyConfigMap resource
-				Expect(k8sClient.Delete(ctx, prometheusKubeRBACPoxyConfigMapTemplate.DeepCopy())).Should(Succeed())
-
-				// Wait for the prometheusKubeRBACPoxyConfigMap to be recreated
-				utils.WaitForResource(k8sClient, ctx, prometheusKubeRBACPoxyConfigMapTemplate.DeepCopy(), timeout, interval)
-			})
-		})
-		When("the prometheus service is modified", func() {
-			It("should revert the changes and bring the resource back to its managed state", func() {
-				// Get an updated prometheus service
-				prometheusService := prometheusServiceTemplate.DeepCopy()
-				prometheusServiceKey := utils.GetResourceKey(prometheusService)
-				Expect(k8sClient.Get(ctx, prometheusServiceKey, prometheusService)).Should(Succeed())
-
-				// Update to empty spec
-				spec := prometheusService.Spec
-				// Added dummy value because ports is a required field
-				// and clusterIP is an immutable field for service resource
-				prometheusService.Spec = corev1.ServiceSpec{
-					Ports: []corev1.ServicePort{
-						{
-							Port: 1234,
-						},
-					},
-					ClusterIP: spec.ClusterIP,
-				}
-				Expect(k8sClient.Update(ctx, prometheusService)).Should(Succeed())
-
-				// Wait for the spec changes to be reverted
-				Eventually(func() corev1.ServiceSpec {
-					prometheusService := prometheusService.DeepCopy()
-					Expect(k8sClient.Get(ctx, prometheusServiceKey, prometheusService)).Should(Succeed())
-					return prometheusService.Spec
-				}, timeout, interval).Should(Equal(spec))
-			})
-		})
-		When("the prometheus service resource is deleted", func() {
-			It("should create a new prometheus service in the namespace", func() {
-				// Delete the prometheus service resource
-				Expect(k8sClient.Delete(ctx, prometheusServiceTemplate.DeepCopy())).Should(Succeed())
-
-				// Wait for the prometheus service to be recreated
-				utils.WaitForResource(k8sClient, ctx, prometheusServiceTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("prometheus has non-ready replicas", func() {
@@ -1811,35 +1719,6 @@ var _ = Describe("ManagedOCS controller", func() {
 
 				// Wait for the NetworkPolicy to be recreated
 				utils.WaitForResource(k8sClient, ctx, providerApiServerIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
-			})
-		})
-		When("the prometheus proxy ingress NetworkPolicy resource is modified", func() {
-			It("should revert the changes and bring the resource back to its managed state", func() {
-				// Get an updated NetworkPolicy
-				prometheusProxyIngress := prometheusProxyIngressNetworkPolicyTemplate.DeepCopy()
-				prometheusProxyIngressKey := utils.GetResourceKey(prometheusProxyIngress)
-				Expect(k8sClient.Get(ctx, prometheusProxyIngressKey, prometheusProxyIngress)).Should(Succeed())
-
-				// Update to empty spec
-				spec := prometheusProxyIngress.Spec.DeepCopy()
-				prometheusProxyIngress.Spec = netv1.NetworkPolicySpec{}
-				Expect(k8sClient.Update(ctx, prometheusProxyIngress)).Should(Succeed())
-
-				// Wait for the spec changes to be reverted
-				Eventually(func() *netv1.NetworkPolicySpec {
-					prometheusProxyIngress := prometheusProxyIngressNetworkPolicyTemplate.DeepCopy()
-					Expect(k8sClient.Get(ctx, prometheusProxyIngressKey, prometheusProxyIngress)).Should(Succeed())
-					return &prometheusProxyIngress.Spec
-				}, timeout, interval).Should(Equal(spec))
-			})
-		})
-		When("the prometheus proxy ingress NetworkPolicy resource is deleted", func() {
-			It("should create a new ingress NetworkPolicy in the namespace", func() {
-				// Delete the NetworkPolicy resource
-				Expect(k8sClient.Delete(ctx, prometheusProxyIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
-
-				// Wait for the NetworkPolicy to be recreated
-				utils.WaitForResource(k8sClient, ctx, prometheusProxyIngressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 			})
 		})
 		When("the addon config map does not exist while all other uninstall conditions are met", func() {
