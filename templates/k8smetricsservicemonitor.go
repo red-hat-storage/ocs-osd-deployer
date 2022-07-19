@@ -31,6 +31,9 @@ var params = map[string][]string{
 		"{__name__='node_disk_write_time_seconds_total'}",
 		"{__name__='node_disk_reads_completed_total'}",
 		"{__name__='node_disk_writes_completed_total'}",
+		"{__name__='subscription_sync_total'}",
+		"{__name__='cluster:kubelet_volume_stats_used_bytes:provisioner:sum'}",
+		"{__name__='cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum'}",
 	},
 }
 

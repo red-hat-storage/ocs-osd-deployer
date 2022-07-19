@@ -40,20 +40,25 @@ var (
 	PrometheusServingCertSecretName     string = "prometheus-serving-cert-secret"
 	PrometheusKubeRBACPoxyConfigMapName string = "prometheus-kube-rbac-proxy-config"
 )
-var metrics = []string{
+var providerMetrics = []string{
 	"job:ceph_versions_running:count",
 	"job:ceph_pools_iops_bytes:total",
 	"job:ceph_pools_iops:total",
-	"job:kube_pv:count",
 	"job:ceph_osd_metadata:count",
 	"ceph_health_status",
 	"ceph_cluster_total_used_raw_bytes",
 	"ceph_cluster_total_bytes",
-	"cluster:kubelet_volume_stats_used_bytes:provisioner:sum",
-	"cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum",
+	"subscription_sync_total",
 }
 
-var alerts = []string{
+var consumerMetrics = []string{
+	"job:kube_pv:count",
+	"cluster:kubelet_volume_stats_used_bytes:provisioner:sum",
+	"cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum",
+	"subscription_sync_total",
+}
+
+var providerAlerts = []string{
 	"CephMdsMissingReplicas",
 	"CephMgrIsAbsent",
 	"CephMgrIsMissingReplicas",
@@ -149,15 +154,22 @@ var PrometheusTemplate = promv1.Prometheus{
 					},
 					EndpointParams: map[string]string{},
 				},
-				WriteRelabelConfigs: []promv1.RelabelConfig{
-					{
-						SourceLabels: []string{"__name__", "alertname"},
-						Regex:        getRelableRegex(alerts, metrics),
-						Action:       "keep",
-					},
-				},
 			},
 		},
+	},
+}
+var ProviderWriteRelabelConfigs = []promv1.RelabelConfig{
+	{
+		SourceLabels: []string{"__name__", "alertname"},
+		Regex:        getRelableRegex(providerAlerts, providerMetrics),
+		Action:       "keep",
+	},
+}
+var ConsumerWriteRelabelConfigs = []promv1.RelabelConfig{
+	{
+		SourceLabels: []string{"__name__"},
+		Regex:        strings.Join(consumerMetrics, "|"),
+		Action:       "keep",
 	},
 }
 

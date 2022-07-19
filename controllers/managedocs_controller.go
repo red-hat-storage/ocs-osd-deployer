@@ -1056,6 +1056,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 
 		r.prometheus.Spec = desired.Spec
 		r.prometheus.Spec.ExternalLabels["clusterId"] = string(clusterVersion.Spec.ClusterID)
+		r.prometheus.Spec.ExternalLabels["addonName"] = r.AddonConfigMapName
 		r.prometheus.Spec.Alerting.Alertmanagers[0].Namespace = r.namespace
 		r.prometheus.Spec.AdditionalAlertRelabelConfigs = &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
@@ -1087,6 +1088,11 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 				remoteWriteSpec.OAuth2.ClientSecret.Key = rhobsRemoteWriteConfigSecretName
 				remoteWriteSpec.OAuth2.TokenURL = r.RHSSOTokenEndpoint
 				remoteWriteSpec.OAuth2.EndpointParams["audience"] = string(rhobsAudience)
+				if r.DeploymentType == providerDeploymentType {
+					remoteWriteSpec.WriteRelabelConfigs = templates.ProviderWriteRelabelConfigs
+				} else {
+					remoteWriteSpec.WriteRelabelConfigs = templates.ConsumerWriteRelabelConfigs
+				}
 			} else {
 				r.Log.Info("RHOBS remote write config secret not found , disabling remote write")
 				r.prometheus.Spec.RemoteWrite = nil
