@@ -1395,7 +1395,7 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 
 		cloneRookConfigMap.Data["CSI_RBD_PLUGIN_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
 			{
-				Name:     "driver-registar",
+				Name:     "driver-registrar",
 				Resource: utils.GetResourceRequirements("driver-registrar"),
 			},
 			{
@@ -1420,6 +1420,10 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 			{
 				Name:     "csi-attacher",
 				Resource: utils.GetResourceRequirements("csi-attacher"),
+			},
+			{
+				Name:     "csi-snapshotter",
+				Resource: utils.GetResourceRequirements("csi-snapshotter"),
 			},
 			{
 				Name:     "csi-cephfsplugin",
