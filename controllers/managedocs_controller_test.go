@@ -645,7 +645,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there is no rhobs secret", func() {
 			It("should  create prometheus resource without remote write spec", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
+				if testReconciler.DeploymentType == providerDeploymentType {
 					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)
 					Eventually(func() bool {
 						prom := promTemplate.DeepCopy()
@@ -660,7 +660,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there is a rhobs secret with missing values", func() {
 			It("should not create prometheus resource with remote write spec", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
+				if testReconciler.DeploymentType == providerDeploymentType {
 					secret := rhobsSecretTemplate.DeepCopy()
 					delete(secret.Data, "prom-remote-write-config-id")
 					Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
@@ -677,7 +677,7 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("there is a rhobs secret", func() {
 			It("should create prometheus resources", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
+				if testReconciler.DeploymentType == providerDeploymentType {
 					secret := rhobsSecretTemplate.DeepCopy()
 					Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
 					utils.WaitForResource(k8sClient, ctx, promTemplate.DeepCopy(), timeout, interval)

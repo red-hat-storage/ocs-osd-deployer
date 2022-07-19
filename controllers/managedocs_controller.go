@@ -1061,7 +1061,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 			},
 			Key: alertRelabelConfigSecretKey,
 		}
-		if r.DeploymentType != convergedDeploymentType {
+		if r.DeploymentType == providerDeploymentType {
 			if err := r.get(r.rhobsRemoteWriteConfigSecret); err != nil && !errors.IsNotFound(err) {
 				return err
 			}
@@ -1090,7 +1090,7 @@ func (r *ManagedOCSReconciler) reconcilePrometheus() error {
 				r.prometheus.Spec.RemoteWrite = nil
 			}
 		} else {
-			// removing remote write spec for converged clusters
+			// removing remote write spec for converged/consumer clusters
 			r.prometheus.Spec.RemoteWrite = nil
 		}
 		return nil

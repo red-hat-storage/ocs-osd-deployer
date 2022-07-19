@@ -59,13 +59,10 @@ var metrics = []string{
 	"job:ceph_versions_running:count",
 	"job:ceph_pools_iops_bytes:total",
 	"job:ceph_pools_iops:total",
-	"job:kube_pv:count",
 	"job:ceph_osd_metadata:count",
 	"ceph_health_status",
 	"ceph_cluster_total_used_raw_bytes",
 	"ceph_cluster_total_bytes",
-	"cluster:kubelet_volume_stats_used_bytes:provisioner:sum",
-	"cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum",
 }
 
 var PrometheusTemplate = promv1.Prometheus{
