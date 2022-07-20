@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package aws
+package main
 
 import (
 	"testing"
@@ -40,7 +40,7 @@ import (
 
 const (
 	testNamespace  = "default"
-	testMockerAddr = "localhost:8081"
+	testMockerAddr = "localhost:8082"
 )
 
 var cfg *rest.Config
@@ -96,6 +96,8 @@ const (
 )
 
 func runIMDSv1MockServer(listenAddr string, log logr.Logger) {
+	server := &http.Server{Addr: listenAddr}
+
 	http.HandleFunc(macPath, func(writer http.ResponseWriter, req *http.Request) {
 		log.Info("Received request for mac address")
 		_, err := writer.Write([]byte(fakeMac))
@@ -115,8 +117,8 @@ func runIMDSv1MockServer(listenAddr string, log logr.Logger) {
 	})
 
 	log.Info("Starting fake IMDS v1 server...")
-	err := http.ListenAndServe(listenAddr, nil)
-	if err != nil {
+	err := server.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
 		log.Error(err, "Failed to start fake IMDS v1 server")
 	}
 }

@@ -146,7 +146,7 @@ readinessServer: fmt vet ## Build readiness probe binary.
 	go build -o bin/readinessServer readinessProbe/main.go
 
 .PHONY: awsDataGather
-awsDataGather: cmd/awsDataGather/main.go pkg/aws/gather.go
+awsDataGather: cmd/awsDataGather/main.go pkg/aws/imds_client.go
 	go build -o bin/awsDataGather cmd/awsDataGather/main.go
 
 .PHONY: export_env_vars
@@ -204,6 +204,7 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests --interactive=false -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/aws-data-gather && $(KUSTOMIZE) edit set image controller=$(IMG)
 	cd config/manifests/bases && \
 		rm -rf kustomization.yaml && \
 		$(KUSTOMIZE) create --resources ocs-osd-deployer.clusterserviceversion.yaml && \

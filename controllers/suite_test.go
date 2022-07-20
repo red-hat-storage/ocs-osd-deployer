@@ -36,6 +36,7 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v1alpha1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
+	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -229,6 +230,15 @@ var _ = BeforeSuite(func() {
 			"test-key": "test-value",
 		}
 		Expect(k8sClient.Create(ctx, rookConfigMap)).ShouldNot(HaveOccurred())
+
+		// Create the aws data config map
+		awsConfigMap := &corev1.ConfigMap{}
+		awsConfigMap.Name = aws.DataConfigMapName
+		awsConfigMap.Namespace = testPrimaryNamespace
+		awsConfigMap.Data = map[string]string{
+			aws.CidrKey: "10.0.0.0/16",
+		}
+		Expect(k8sClient.Create(ctx, awsConfigMap)).ShouldNot(HaveOccurred())
 
 		// create a mock deplyer CSV
 		deployerCSV := &opv1a1.ClusterServiceVersion{}

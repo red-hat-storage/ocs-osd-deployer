@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,12 +77,9 @@ func MapItems(source []string, transform func(string) string) []string {
 
 func Retry(attempts int, sleep time.Duration, f func() error) error {
 	var err error
-	for i := 0; ; i++ {
+	for i := 0; i < attempts; i++ {
 		if err = f(); err == nil {
 			return nil
-		}
-		if i >= (attempts - 1) {
-			break
 		}
 		time.Sleep(sleep)
 		log.Println("retrying after error:", err)
@@ -102,4 +100,15 @@ func HTTPGetAndParseBody(endpoint string) (string, error) {
 		return "", fmt.Errorf("Failed to read response body: %v", err)
 	}
 	return string(body), nil
+}
+
+func DeploymentNameFromPodName(podName string) (string, error) {
+	//Pod names created from deployments follow the convention:
+	// <deployment_name>-<pod-template-hash>-<uid>
+	// Therefore, we can get the deployment_name by omitting the last hyphened two sections
+	tmpStr := strings.Split(podName, "-")
+	if len(tmpStr) < 3 {
+		return "", fmt.Errorf("invalid pod name")
+	}
+	return strings.Join(tmpStr[:len(tmpStr)-2], "-"), nil
 }

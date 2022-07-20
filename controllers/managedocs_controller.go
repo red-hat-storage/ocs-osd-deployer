@@ -1370,27 +1370,27 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 		cloneRookConfigMap.Data["ROOK_CSI_ENABLE_RBD"] = "false"
 	} else {
 		cloneRookConfigMap.Data["CSI_RBD_PROVISIONER_RESOURCE"] = utils.MarshalRookResourceRequirements(utils.RookResourceRequirementsList{
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-provisioner",
 				Resource: utils.GetResourceRequirements("csi-provisioner"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-resizer",
 				Resource: utils.GetResourceRequirements("csi-resizer"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-attacher",
 				Resource: utils.GetResourceRequirements("csi-attacher"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-snapshotter",
 				Resource: utils.GetResourceRequirements("csi-snapshotter"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "csi-rbdplugin",
 				Resource: utils.GetResourceRequirements("csi-rbdplugin"),
 			},
-			{
+			utils.RookResourceRequirements{
 				Name:     "liveness-prometheus",
 				Resource: utils.GetResourceRequirements("liveness-prometheus"),
 			},
@@ -1472,10 +1472,10 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 
 		if r.DeploymentType != convergedDeploymentType {
 			// Get the aws config map
-			awsConfigMap := corev1.ConfigMap{}
+			awsConfigMap := &corev1.ConfigMap{}
 			awsConfigMap.Name = aws.DataConfigMapName
 			awsConfigMap.Namespace = r.namespace
-			if err := r.get(&awsConfigMap); err != nil {
+			if err := r.get(awsConfigMap); err != nil {
 				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
 			}
 

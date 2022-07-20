@@ -26,6 +26,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o readinessServer readinessProbe/main.go
 
 # Build aws data gathering binary
+# Because the executable is the same name as the directory the source code is in,
+# Go will build it as awsDataGather/main; the name will be changed during the copy operation.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o awsDataGather awsDataGather/main.go
 
 # Use distroless as minimal base image to package the manager binary
@@ -34,7 +36,7 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/readinessServer .
-COPY --from=builder /workspace/awsDataGather .
+COPY --from=builder /workspace/awsDataGather/main awsDataGather
 COPY --from=builder /workspace/templates/customernotification.html /templates/
 USER nonroot:nonroot
 

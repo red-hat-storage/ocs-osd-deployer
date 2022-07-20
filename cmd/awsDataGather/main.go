@@ -6,9 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/red-hat-storage/ocs-osd-deployer/utils"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -20,7 +23,7 @@ import (
 
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-	log := ctrl.Log.WithName("aws-data-gather")
+	log := ctrl.Log.WithName("main")
 
 	namespace, found := os.LookupEnv("NAMESPACE")
 	if !found {
@@ -28,10 +31,21 @@ func main() {
 			"NAMESPACE environment variable not found\n")
 		os.Exit(1)
 	}
-	podName, found := os.LookupEnv("NAME")
+	podName, found := os.LookupEnv("POD_NAME")
 	if !found {
 		fmt.Fprintf(os.Stderr,
-			"NAME environment variable not found\n")
+			"POD_NAME environment variable not found\n")
+		os.Exit(1)
+	}
+
+	// We need the deployment name to use as an owner reference.
+	// However, the deployment name cannot be passed as an environment variable,
+	// so we derive it from the pod name.
+	deploymentName, err := utils.DeploymentNameFromPodName(podName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"Could not determine deployment name from pod name (%s)",
+			podName)
 		os.Exit(1)
 	}
 
@@ -46,49 +60,64 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Need to get the pod resource that is running
-	// This will later be used as the ControllerReference for the data ConfigMap
-	var pod corev1.Pod
-	err = k8sClient.Get(context.Background(), client.ObjectKey{
-		Name:      podName,
-		Namespace: namespace,
-	}, &pod)
+	// This will later be used as the OwnerReference for the data ConfigMap
+	var deployment appsv1.Deployment
+	err = utils.Retry(5, 1*time.Second, func() error {
+		err := k8sClient.Get(context.Background(), client.ObjectKey{
+			Name:      deploymentName,
+			Namespace: namespace,
+		}, &deployment)
+		return err
+	})
 	if err != nil {
-		log.Error(err, "Failed to find pod '%s' in namespace '%s'", podName, namespace)
+		log.Error(err, fmt.Sprintf("Failed to find deployment '%s' in namespace '%s'", deploymentName, namespace))
 		os.Exit(1)
 	}
 
 	log.Info("Gathering AWS data")
-	awsData, err := aws.GatherData(aws.IMDSv1Server, log)
-	if err != nil {
-		log.Error(err, "error running aws data gather")
-		os.Exit(1)
-	}
-
-	log.Info("Creating Config Map with AWS data")
-	configMap := corev1.ConfigMap{}
-	configMap.Name = aws.DataConfigMapName
-	configMap.Namespace = namespace
-	_, err = ctrl.CreateOrUpdate(context.Background(), k8sClient, &configMap, func() error {
-		if err := ctrl.SetControllerReference(&pod, &configMap, options.Scheme); err != nil {
-			return err
-		}
-		configMap.Data = map[string]string{
-			aws.CidrKey: awsData[aws.CidrKey],
-		}
-		return nil
-	})
-	if err != nil {
-		log.Error(err, "Failed to create configmap")
+	if err := gatherAndSaveData(aws.IMDSv1Server, deployment, k8sClient); err != nil {
+		log.Error(err, "Failed to gather AWS data")
 		os.Exit(1)
 	}
 
 	log.Info("AWS data gathering successfully completed!")
 
 	// Set up signal handler, so that a clean up procedure will be run if the pod running this code is deleted.
+	// This code is run as part of a deployment that is pushed to Kubernetes through an OLM Bundle.
+	// At this time, OLM Bundles do not support restartPolicy: OnFailure,
+	// so terminating this program will cause the pod to keep getting restarted and needlessly running.
+	// To avoid this, a signal handler is set up to only terminate the program when the pod is getting deleted.
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
 	<-signalChan
 
 	log.Info("AWS data gather program terminating")
+}
+
+func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClient client.Client) error {
+	log := ctrl.Log.WithName("GatherData")
+
+	imdsClient := aws.NewIMDSClient(imdsServer, k8sClient)
+
+	log.Info("Fetching AWS VPC IPv4 CIDR data")
+	if err := imdsClient.FetchIPv4CIDR(); err != nil {
+		return fmt.Errorf("Failed to get VPC IPv4 CIDR: %v", err)
+	}
+
+	log.Info("Creating Config Map with AWS data")
+	// Setting the owner of the configmap resource to this deployment that creates it.
+	// That way, the configmap will go away when the deployment does.
+	// The version and kind are being manually inserted because the deployment struct doesn't have it.
+	// See: https://github.com/kubernetes/client-go/issues/861#issuecomment-686806279
+	owner := metav1.OwnerReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       deployment.Name,
+		UID:        deployment.UID,
+	}
+	if err := imdsClient.CreateConfigMap(deployment.Namespace, owner); err != nil {
+		return fmt.Errorf("Failed to create configmap: %v", err)
+	}
+
+	return nil
 }
