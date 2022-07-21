@@ -17,8 +17,6 @@ limitations under the License.
 package utils
 
 import (
-	"strings"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -62,7 +60,10 @@ func AddAnnotation(obj metav1.Object, key string, value string) {
 	annotations[key] = value
 }
 
-// GetRegexMatcher converts list of alerts to regex matcher
-func GetRegexMatcher(alerts []string) string {
-	return "^" + strings.Join(alerts, "$|^") + "$"
+func MapItems(source []string, transform func(string) string) []string {
+	target := make([]string, len(source))
+	for i := 0; i < len(source); i += 1 {
+		target[i] = transform(source[i])
+	}
+	return target
 }
