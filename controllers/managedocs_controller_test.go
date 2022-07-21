@@ -322,6 +322,14 @@ var _ = Describe("ManagedOCS controller", func() {
 			Enable:   true,
 		},
 	}
+	remoteWriteRegexString := "(ALERTS;(CephMdsMissingReplicas|CephMgrIsAbsent|CephMgrIsMissingReplicas|CephNodeDown|" +
+		"CephClusterErrorState|CephClusterWarningState|CephOSDVersionMismatch|CephMonVersionMismatch|CephOSDFlapping|" +
+		"CephOSDDiskNotResponding|CephOSDDiskUnavailable|CephDataRecoveryTakingTooLong|CephPGRepairTakingTooLong|" +
+		"CephMonQuorumAtRisk|CephMonQuorumLost))|(job:ceph_versions_running:count;)|" +
+		"(job:ceph_pools_iops_bytes:total;)|(job:ceph_pools_iops:total;)|(job:kube_pv:count;)" +
+		"|(job:ceph_osd_metadata:count;)|(ceph_health_status;)|(ceph_cluster_total_used_raw_bytes;)|" +
+		"(ceph_cluster_total_bytes;)|(cluster:kubelet_volume_stats_used_bytes:provisioner:sum;)|" +
+		"(cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum;)"
 
 	setupUninstallConditions := func(
 		shouldAddonConfigMapExist bool,
@@ -689,6 +697,15 @@ var _ = Describe("ManagedOCS controller", func() {
 						}
 						return len(prom.Spec.RemoteWrite) > 0
 					}, timeout, interval).Should(BeTrue())
+				}
+			})
+			It("should have approriate remote-write relabel configs", func() {
+				if testReconciler.DeploymentType != convergedDeploymentType {
+					prom := promTemplate.DeepCopy()
+					utils.WaitForResource(k8sClient, ctx, prom, timeout, interval)
+					Expect(prom.Spec.RemoteWrite[0].WriteRelabelConfigs[0].SourceLabels).Should(Equal([]string{"__name__", "alertname"}))
+					Expect(prom.Spec.RemoteWrite[0].WriteRelabelConfigs[0].Regex).Should(Equal(remoteWriteRegexString))
+					Expect(prom.Spec.RemoteWrite[0].WriteRelabelConfigs[0].Action).Should(Equal("keep"))
 				}
 			})
 		})

@@ -14,9 +14,10 @@ package templates
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
-	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -79,7 +80,7 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 					GroupWait:      "30s",
 					GroupInterval:  "5m",
 					RepeatInterval: "12h",
-					Matchers:       []promv1a1.Matcher{{Name: "alertname", Value: utils.GetRegexMatcher(smtpAlerts), MatchType: promv1a1.MatchRegexp}},
+					Matchers:       []promv1a1.Matcher{{Name: "alertname", Value: getRegexMatcher(smtpAlerts), MatchType: promv1a1.MatchRegexp}},
 					Receiver:       "SendGrid",
 				},
 				),
@@ -88,7 +89,7 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 					GroupWait:      "30s",
 					GroupInterval:  "5m",
 					RepeatInterval: "12h",
-					Matchers:       []promv1a1.Matcher{{Name: "alertname", Value: utils.GetRegexMatcher(pagerdutyAlerts), MatchType: promv1a1.MatchRegexp}},
+					Matchers:       []promv1a1.Matcher{{Name: "alertname", Value: getRegexMatcher(pagerdutyAlerts), MatchType: promv1a1.MatchRegexp}},
 					Receiver:       "pagerduty",
 				},
 				),
@@ -132,4 +133,8 @@ var AlertmanagerConfigTemplate = promv1a1.AlertmanagerConfig{
 		},
 		},
 	},
+}
+
+func getRegexMatcher(alerts []string) string {
+	return fmt.Sprintf("^%s$", strings.Join(alerts, "$|^"))
 }

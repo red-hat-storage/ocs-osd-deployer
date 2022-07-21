@@ -41,6 +41,19 @@ var (
 	PrometheusKubeRBACPoxyConfigMapName string = "prometheus-kube-rbac-proxy-config"
 )
 var metrics = []string{
+	"job:ceph_versions_running:count",
+	"job:ceph_pools_iops_bytes:total",
+	"job:ceph_pools_iops:total",
+	"job:kube_pv:count",
+	"job:ceph_osd_metadata:count",
+	"ceph_health_status",
+	"ceph_cluster_total_used_raw_bytes",
+	"ceph_cluster_total_bytes",
+	"cluster:kubelet_volume_stats_used_bytes:provisioner:sum",
+	"cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum",
+}
+
+var alerts = []string{
 	"CephMdsMissingReplicas",
 	"CephMgrIsAbsent",
 	"CephMgrIsMissingReplicas",
@@ -56,16 +69,6 @@ var metrics = []string{
 	"CephPGRepairTakingTooLong",
 	"CephMonQuorumAtRisk",
 	"CephMonQuorumLost",
-	"job:ceph_versions_running:count",
-	"job:ceph_pools_iops_bytes:total",
-	"job:ceph_pools_iops:total",
-	"job:kube_pv:count",
-	"job:ceph_osd_metadata:count",
-	"ceph_health_status",
-	"ceph_cluster_total_used_raw_bytes",
-	"ceph_cluster_total_bytes",
-	"cluster:kubelet_volume_stats_used_bytes:provisioner:sum",
-	"cluster:kube_persistentvolumeclaim_resource_requests_storage_bytes:provisioner:sum",
 }
 
 var PrometheusTemplate = promv1.Prometheus{
@@ -148,12 +151,23 @@ var PrometheusTemplate = promv1.Prometheus{
 				},
 				WriteRelabelConfigs: []promv1.RelabelConfig{
 					{
-						SourceLabels: []string{"__name__"},
-						Regex:        strings.Join(metrics[:], "|"),
+						SourceLabels: []string{"__name__", "alertname"},
+						Regex:        getRelableRegex(alerts, metrics),
 						Action:       "keep",
 					},
 				},
 			},
 		},
 	},
+}
+
+func getRelableRegex(alerts []string, metrics []string) string {
+	return fmt.Sprintf(
+		"(ALERTS;(%s))|%s",
+		strings.Join(alerts, "|"),
+		strings.Join(
+			utils.MapItems(metrics, func(str string) string { return fmt.Sprintf("(%s;)", str) }),
+			"|",
+		),
+	)
 }
