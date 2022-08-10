@@ -50,6 +50,11 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 		MonPVCTemplate: &corev1.PersistentVolumeClaim{
 			Spec: corev1.PersistentVolumeClaimSpec{
 				StorageClassName: &gp2,
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						"storage": resource.MustParse("50Gi"),
+					},
+				},
 				AccessModes: []corev1.PersistentVolumeAccessMode{
 					corev1.ReadWriteOnce,
 				},
