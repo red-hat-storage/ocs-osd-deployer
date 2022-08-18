@@ -10,6 +10,12 @@ spec:
     spec:
       containers:
       - name: kube-rbac-proxy
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         resources:
           limits:
             cpu: 50m
@@ -28,6 +34,12 @@ spec:
           protocol: TCP
           name: https
       - name: manager
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         args:
         - "--metrics-addr=127.0.0.1:8080"
         - "--enable-leader-election"

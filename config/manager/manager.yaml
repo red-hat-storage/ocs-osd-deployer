@@ -33,6 +33,12 @@ spec:
         - --enable-leader-election
         image: controller:latest
         name: manager
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         resources:
           limits:
             cpu: 100m
@@ -52,6 +58,12 @@ spec:
         - name: RHOBS_ENDPOINT
         - name: RH_SSO_TOKEN_ENDPOINT
       - name: readiness-server
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         command:
         - /readinessServer
         image: controller:latest
