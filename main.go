@@ -23,9 +23,11 @@ import (
 	"os"
 
 	"go.uber.org/zap/zapcore"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -38,6 +40,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	operators "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	ovnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/egressfirewall/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
@@ -90,6 +93,8 @@ func addAllSchemes(scheme *runtime.Scheme) {
 	utilruntime.Must(ocsv1alpha1.AddToScheme(scheme))
 
 	utilruntime.Must(configv1.AddToScheme(scheme))
+
+	utilruntime.Must(ovnv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -142,6 +147,7 @@ func main() {
 		RHOBSSecretName:              fmt.Sprintf("%v-prom-remote-write", addonName),
 		RHOBSEndpoint:                envVars[rhobsEndpointEnvVarName],
 		RHSSOTokenEndpoint:           envVars[rhssoTokenEndpointEnvVarName],
+		AvailableCRDs:                mapCRDAvailability(controllers.EgressFirewallCRD, controllers.EgressNetworkPolicyCRD),
 	}).SetupWithManager(mgr, nil); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "ManagedOCS")
 		os.Exit(1)
@@ -214,4 +220,33 @@ func ensureManagedOCS(c client.Client, log logr.Logger, envVars map[string]strin
 		log.Error(err, "Unable to create ManagedOCS resource")
 		return err
 	}
+}
+
+func mapCRDAvailability(crdNames ...string) map[string]bool {
+
+	var options client.Options
+	options.Scheme = runtime.NewScheme()
+	utilruntime.Must(apiextensionsv1.AddToScheme(options.Scheme))
+
+	k8sClient, err := client.New(config.GetConfigOrDie(), options)
+	if err != nil {
+		setupLog.Error(err, "error creating client")
+		os.Exit(1)
+	}
+
+	CRDExist := map[string]bool{}
+
+	for _, crdName := range crdNames {
+		crd := apiextensionsv1.CustomResourceDefinition{}
+		err = k8sClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd)
+
+		if err != nil && !errors.IsNotFound(err) {
+			setupLog.Error(err, fmt.Sprintf("Error Getting CRD for %s", crdName))
+			os.Exit(1)
+		}
+
+		CRDExist[crdName] = crd.UID != ""
+	}
+
+	return CRDExist
 }

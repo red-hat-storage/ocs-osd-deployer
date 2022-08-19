@@ -30,6 +30,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	ovnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/egressfirewall/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
@@ -92,7 +93,6 @@ func TestAPIs(t *testing.T) {
 		panic(fmt.Sprintf("Environment var '%s' should be set to one of '%s' '%s' and '%s' values",
 			testDeploymentTypeEnvVarName, convergedDeploymentType, providerDeploymentType, consumerDeploymentType))
 	}
-
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
@@ -150,6 +150,9 @@ var _ = BeforeSuite(func() {
 		err = openshiftv1.AddToScheme(scheme.Scheme)
 		Expect(err).NotTo(HaveOccurred())
 
+		err = ovnv1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
+
 		err = odfv1a1.AddToScheme(scheme.Scheme)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -172,6 +175,11 @@ var _ = BeforeSuite(func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
+		crdList := map[string]bool{}
+		for _, CRDNames := range []string{EgressNetworkPolicyCRD, EgressFirewallCRD} {
+			crdList[CRDNames] = true
+		}
+
 		testReconciler = &ManagedOCSReconciler{
 			Client:                       k8sManager.GetClient(),
 			UnrestrictedClient:           k8sClient,
@@ -188,6 +196,7 @@ var _ = BeforeSuite(func() {
 			RHOBSEndpoint:                os.Getenv(testRHOBSEndpointEnvVarName),
 			RHSSOTokenEndpoint:           os.Getenv(testRHssoTokenEndpointEnvVarName),
 			RHOBSSecretName:              testRHOBSSecretName,
+			AvailableCRDs:                crdList,
 		}
 
 		ctrlOptions := &controller.Options{

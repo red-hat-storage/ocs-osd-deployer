@@ -51,6 +51,7 @@ import (
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
 	openshiftv1 "github.com/openshift/api/network/v1"
+	ovnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/egressfirewall/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	odfv1a1 "github.com/red-hat-data-services/odf-operator/api/v1alpha1"
@@ -63,10 +64,10 @@ import (
 )
 
 const (
-	ManagedOCSFinalizer = "managedocs.ocs.openshift.io"
-)
+	ManagedOCSFinalizer    = "managedocs.ocs.openshift.io"
+	EgressFirewallCRD      = "egressfirewalls.k8s.ovn.org"
+	EgressNetworkPolicyCRD = "egressnetworkpolicies.network.openshift.io"
 
-const (
 	managedOCSName                     = "managedocs"
 	storageClusterName                 = "ocs-storagecluster"
 	prometheusName                     = "managed-ocs-prometheus"
@@ -88,6 +89,7 @@ const (
 	ocsOperatorName                    = "ocs-operator"
 	mcgOperatorName                    = "mcg-operator"
 	egressNetworkPolicyName            = "egress-rule"
+	egressFirewallName                 = "default"
 	ingressNetworkPolicyName           = "ingress-rule"
 	cephIngressNetworkPolicyName       = "ceph-ingress-rule"
 	providerApiServerNetworkPolicyName = "provider-api-server-rule"
@@ -126,11 +128,13 @@ type ManagedOCSReconciler struct {
 	RHOBSSecretName              string
 	RHOBSEndpoint                string
 	RHSSOTokenEndpoint           string
+	AvailableCRDs                map[string]bool
 
 	ctx                            context.Context
 	managedOCS                     *v1.ManagedOCS
 	storageCluster                 *ocsv1.StorageCluster
 	egressNetworkPolicy            *openshiftv1.EgressNetworkPolicy
+	egressFirewall                 *ovnv1.EgressFirewall
 	ingressNetworkPolicy           *netv1.NetworkPolicy
 	cephIngressNetworkPolicy       *netv1.NetworkPolicy
 	providerAPIServerNetworkPolicy *netv1.NetworkPolicy
@@ -171,9 +175,11 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclass,verbs=get;list;watch
 // +kubebuilder:rbac:groups="networking.k8s.io",namespace=system,resources=networkpolicies,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="network.openshift.io",namespace=system,resources=egressnetworkpolicies,verbs=create;get;list;watch;update
+// +kubebuilder:rbac:groups="k8s.ovn.org",namespace=system,resources=egressfirewalls,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="coordination.k8s.io",namespace=system,resources=leases,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="odf.openshift.io",namespace=system,resources=storagesystems,verbs=list;watch;delete
 // +kubebuilder:rbac:groups="config.openshift.io",resources=clusterversions,verbs=get;watch;list
+// +kubebuilder:rbac:groups="apiextensions.k8s.io",resources=customresourcedefinitions,verbs=get;watch;list
 
 // SetupWithManager creates an setup a ManagedOCSReconciler to work with the provided manager
 func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *controller.Options) error {
@@ -257,7 +263,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 		},
 	)
 
-	return ctrl.NewControllerManagedBy(mgr).
+	managedOCSController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(*ctrlOptions).
 		For(&v1.ManagedOCS{}, managedOCSPredicates).
 
@@ -268,7 +274,6 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 		Owns(&promv1a1.AlertmanagerConfig{}).
 		Owns(&promv1.PrometheusRule{}).
 		Owns(&promv1.ServiceMonitor{}).
-		Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
@@ -313,10 +318,17 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 			&source.Kind{Type: &opv1a1.ClusterServiceVersion{}},
 			enqueueManangedOCSRequest,
 			csvPredicates,
-		).
+		)
 
-		// Create the controller
-		Complete(r)
+	if r.AvailableCRDs[EgressFirewallCRD] {
+		managedOCSController = managedOCSController.Owns(&ovnv1.EgressFirewall{})
+	}
+	if r.AvailableCRDs[EgressNetworkPolicyCRD] {
+		managedOCSController = managedOCSController.Owns(&openshiftv1.EgressNetworkPolicy{})
+	}
+
+	// Create the controller
+	return managedOCSController.Complete(r)
 }
 
 // Reconcile changes to all owned resource based on the infromation provided by the ManagedOCS resource
@@ -375,6 +387,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.egressNetworkPolicy = &openshiftv1.EgressNetworkPolicy{}
 	r.egressNetworkPolicy.Name = egressNetworkPolicyName
 	r.egressNetworkPolicy.Namespace = r.namespace
+
+	r.egressFirewall = &ovnv1.EgressFirewall{}
+	r.egressFirewall.Name = egressFirewallName
+	r.egressFirewall.Namespace = r.namespace
 
 	r.ingressNetworkPolicy = &netv1.NetworkPolicy{}
 	r.ingressNetworkPolicy.Name = ingressNetworkPolicyName
@@ -570,6 +586,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileEgressFirewall(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileEgressNetworkPolicy(); err != nil {
@@ -1463,6 +1482,10 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
+	if !r.AvailableCRDs[EgressNetworkPolicyCRD] {
+		r.Log.Info("EgressNetworkPolicy CRD not present, skipping reconcile for egress network policy")
+		return nil
+	}
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
 		if err := r.own(r.egressNetworkPolicy); err != nil {
 			return err
@@ -1552,6 +1575,101 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 		return fmt.Errorf("Failed to update egressNetworkPolicy: %v", err)
 	}
 	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
+	if !r.AvailableCRDs[EgressFirewallCRD] {
+		r.Log.Info("EgressFirewall CRD not present, skipping reconcile for egress firewall")
+		return nil
+	}
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressFirewall, func() error {
+		if err := r.own(r.egressFirewall); err != nil {
+			return err
+		}
+		desired := templates.EgressFirewallTemplate.DeepCopy()
+
+		if r.DeploymentType != convergedDeploymentType {
+			// Get the aws config map
+			awsConfigMap := &corev1.ConfigMap{}
+			awsConfigMap.Name = utils.IMDSConfigMapName
+			awsConfigMap.Namespace = r.namespace
+			if err := r.get(awsConfigMap); err != nil {
+				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
+			}
+
+			// Get the machine cidr
+			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
+			if !ok {
+				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
+			}
+			// Allow egress traffic to that cidr range
+			vpcEgressRule := ovnv1.EgressFirewallRule{
+				Type: ovnv1.EgressFirewallRuleAllow,
+				To: ovnv1.EgressFirewallDestination{
+					CIDRSelector: vpcCIDR,
+				},
+			}
+
+			// Inserting the VPC Egress rule in front of all other egress rules.
+			// The order or rules matter
+			// https://docs.openshift.com/container-platform/4.10/networking/openshift_sdn/configuring-egress-firewall.html#policy-rule-order_openshift-sdn-egress-firewall
+			// Inserting this rule in the front ensures it comes before the EgressNetworkPolicyRuleDeny rule.
+			desired.Spec.Egress = append(
+				[]ovnv1.EgressFirewallRule{
+					vpcEgressRule,
+				},
+				desired.Spec.Egress...,
+			)
+		}
+
+		if r.deadMansSnitchSecret.UID == "" {
+			if err := r.get(r.deadMansSnitchSecret); err != nil {
+				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+			}
+		}
+		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
+		if dmsURL == "" {
+			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
+		}
+		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
+		if err != nil {
+			return fmt.Errorf("Unable to parse DMS url: %v", err)
+		}
+
+		if r.smtpSecret.UID == "" {
+			if err := r.get(r.smtpSecret); err != nil {
+				return fmt.Errorf("Unable to get SMTP secret: %v", err)
+			}
+		}
+		smtpHost := string(r.smtpSecret.Data["host"])
+		if smtpHost == "" {
+			return fmt.Errorf("smtp secret does not contain a host entry")
+		}
+
+		dmsEgressRule := ovnv1.EgressFirewallRule{}
+		dmsEgressRule.To.DNSName = snitchURL.Hostname()
+		dmsEgressRule.Type = ovnv1.EgressFirewallRuleAllow
+
+		smtpEgressRule := ovnv1.EgressFirewallRule{}
+		smtpEgressRule.To.DNSName = smtpHost
+		smtpEgressRule.Type = ovnv1.EgressFirewallRuleAllow
+
+		desired.Spec.Egress = append(
+			[]ovnv1.EgressFirewallRule{
+				dmsEgressRule,
+				smtpEgressRule,
+			},
+			desired.Spec.Egress...,
+		)
+		r.egressFirewall.Spec = desired.Spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Failed to update egressFirewall: %v", err)
+	}
+	return nil
+
 }
 
 func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
