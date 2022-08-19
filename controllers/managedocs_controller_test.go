@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	ovnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/egressfirewall/v1"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -196,6 +197,12 @@ var _ = Describe("ManagedOCS controller", func() {
 	egressNetworkPolicyTemplate := openshiftv1.EgressNetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      egressNetworkPolicyName,
+			Namespace: testPrimaryNamespace,
+		},
+	}
+	egressFirewallTemplate := ovnv1.EgressFirewall{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      egressFirewallName,
 			Namespace: testPrimaryNamespace,
 		},
 	}
@@ -1652,6 +1659,9 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the EgressNetworkPolicy resource is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
+				if !testReconciler.AvailableCRDs[EgressNetworkPolicyCRD] {
+					Skip("Skipping this test as EgressNetworkPolicy is not present")
+				}
 				// Get an updated EgressNetworkPolicy
 				egress := egressNetworkPolicyTemplate.DeepCopy()
 				egressKey := utils.GetResourceKey(egress)
@@ -1674,6 +1684,9 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the SNITCH_URL value in dms secret is modified", func() {
 			It("should update the EgressNetworkPolicy resource with the new snitch domain", func() {
+				if !testReconciler.AvailableCRDs[EgressNetworkPolicyCRD] {
+					Skip("Skipping this test as EgressNetworkPolicy is not present")
+				}
 				dmsSecret := dmsSecretTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(dmsSecret), dmsSecret)).Should(Succeed())
 				dmsSecret.Data["SNITCH_URL"] = []byte("https://test.in/4a029adb4c")
@@ -1695,6 +1708,9 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the host value in smtp secret is modified", func() {
 			It("should update the EgressNetworkPolicy resource with the new host", func() {
+				if !testReconciler.AvailableCRDs[EgressNetworkPolicyCRD] {
+					Skip("Skipping this test as EgressNetworkPolicy is not present")
+				}
 				smtpSecret := smtpSecretTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(smtpSecret), smtpSecret)).Should(Succeed())
 				smtpSecret.Data["host"] = []byte("test-host-2")
@@ -1716,6 +1732,9 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the EgressNetworkPolicy resource is deleted", func() {
 			It("should create a new EgressNetworkPolicy in the namespace", func() {
+				if !testReconciler.AvailableCRDs[EgressNetworkPolicyCRD] {
+					Skip("Skipping this test as EgressNetworkPolicy is not present")
+				}
 				// Delete the EgressNetworkPolicy resource
 				Expect(k8sClient.Delete(ctx, egressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
@@ -1723,6 +1742,93 @@ var _ = Describe("ManagedOCS controller", func() {
 				utils.WaitForResource(k8sClient, ctx, egressNetworkPolicyTemplate.DeepCopy(), timeout, interval)
 			})
 		})
+
+		When("the EgressFirewall resource is modified", func() {
+			It("should revert the changes and bring the resource back to its managed state", func() {
+				if !testReconciler.AvailableCRDs[EgressFirewallCRD] {
+					Skip("Skipping this test as EgressFirewall is not present")
+				}
+				// Get an updated EgressFirewall
+				egress := egressFirewallTemplate.DeepCopy()
+				egressKey := utils.GetResourceKey(egress)
+				Expect(k8sClient.Get(ctx, egressKey, egress)).Should(Succeed())
+
+				// Update to empty spec
+				spec := egress.Spec.DeepCopy()
+				egress.Spec = ovnv1.EgressFirewallSpec{
+					Egress: []ovnv1.EgressFirewallRule{},
+				}
+				Expect(k8sClient.Update(ctx, egress)).Should(Succeed())
+
+				// Wait for the spec changes to be reverted
+				Eventually(func() *ovnv1.EgressFirewallSpec {
+					egress := egressFirewallTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, egressKey, egress)).Should(Succeed())
+					return &egress.Spec
+				}, timeout, interval).Should(Equal(spec))
+			})
+		})
+		When("the SNITCH_URL value in dms secret is modified", func() {
+			It("should update the EgressFirewall resource with the new snitch domain", func() {
+				if !testReconciler.AvailableCRDs[EgressFirewallCRD] {
+					Skip("Skipping this test as EgressFirewall is not present")
+				}
+				dmsSecret := dmsSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(dmsSecret), dmsSecret)).Should(Succeed())
+				dmsSecret.Data["SNITCH_URL"] = []byte("https://test.in/4a029adb4c")
+				Expect(k8sClient.Update(ctx, dmsSecret)).Should(Succeed())
+
+				Eventually(func() bool {
+					egress := egressFirewallTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(egress), egress)).Should(Succeed())
+					egressRules := egress.Spec.Egress
+					for i := range egressRules {
+						egressRule := &egressRules[i]
+						if egressRule.To.DNSName == "test.in" {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the host value in smtp secret is modified", func() {
+			It("should update the EgressFirewall resource with the new host", func() {
+				if !testReconciler.AvailableCRDs[EgressFirewallCRD] {
+					Skip("Skipping this test as EgressFirewall is not present")
+				}
+				smtpSecret := smtpSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(smtpSecret), smtpSecret)).Should(Succeed())
+				smtpSecret.Data["host"] = []byte("test-host-2")
+				Expect(k8sClient.Update(ctx, smtpSecret)).Should(Succeed())
+
+				Eventually(func() bool {
+					egress := egressFirewallTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(egress), egress)).Should(Succeed())
+					egressRules := egress.Spec.Egress
+					for i := range egressRules {
+						egressRule := &egressRules[i]
+						if egressRule.To.DNSName == "test-host-2" {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the EgressFirewall resource is deleted", func() {
+			It("should create a new EgressFirewall in the namespace", func() {
+				if !testReconciler.AvailableCRDs[EgressFirewallCRD] {
+					Skip("Skipping this test as EgressFirewall is not present")
+				}
+				// Delete the EgressFirewall resource
+				Expect(k8sClient.Delete(ctx, egressFirewallTemplate.DeepCopy())).Should(Succeed())
+
+				// Wait for the EgressFirewall to be recreated
+				utils.WaitForResource(k8sClient, ctx, egressFirewallTemplate.DeepCopy(), timeout, interval)
+			})
+		})
+
 		When("the ingress NetworkPolicy resource is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
 				// Get an updated NetworkPolicy
