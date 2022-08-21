@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -60,6 +61,7 @@ import (
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	netv1 "k8s.io/api/networking/v1"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
 const (
@@ -104,7 +106,11 @@ const (
 	providerDeploymentType             = "provider"
 	rhobsRemoteWriteConfigIdSecretKey  = "prom-remote-write-config-id"
 	rhobsRemoteWriteConfigSecretName   = "prom-remote-write-config-secret"
+	ocsRulesName                       = "managed-ocs-rules"
 )
+
+//go:embed managed-ocs-rules.yaml
+var ocsRulesSpec []byte
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
 type ManagedOCSReconciler struct {
@@ -151,6 +157,7 @@ type ManagedOCSReconciler struct {
 	onboardingValidationKeySecret  *corev1.Secret
 	prometheusKubeRBACConfigMap    *corev1.ConfigMap
 	rhobsRemoteWriteConfigSecret   *corev1.Secret
+	ocsRules                       *promv1.PrometheusRule
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -441,6 +448,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.rhobsRemoteWriteConfigSecret = &corev1.Secret{}
 	r.rhobsRemoteWriteConfigSecret.Name = r.RHOBSSecretName
 	r.rhobsRemoteWriteConfigSecret.Namespace = r.namespace
+
+	r.ocsRules = &promv1.PrometheusRule{}
+	r.ocsRules.Name = ocsRulesName
+	r.ocsRules.Namespace = r.namespace
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -562,6 +573,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileDMSPrometheusRule(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileOCSRules(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileOCSInitialization(); err != nil {
@@ -1300,6 +1314,26 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitor() error {
 	return nil
 }
 
+func (r *ManagedOCSReconciler) reconcileOCSRules() error {
+	r.Log.Info("Reconciling OCS Prometheus Rules")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.ocsRules, func() error {
+		if err := r.own(r.ocsRules); err != nil {
+			return err
+		}
+		if err := k8syaml.Unmarshal(ocsRulesSpec, &r.ocsRules.Spec); err != nil {
+			return fmt.Errorf("failed to unmarshal %s.yaml: %w", ocsRulesName, err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to reconcile OCS Prometheus Rules: %w", err)
+	}
+
+	return nil
+}
+
 // reconcileMonitoringResources labels all monitoring resources (ServiceMonitors, PodMonitors, and PrometheusRules)
 // found in the target namespace with a label that matches the label selector the defined on the Prometheus resource
 // we are reconciling in reconcilePrometheus. Doing so instructs the Prometheus instance to notice and react to these labeled
@@ -1337,7 +1371,17 @@ func (r *ManagedOCSReconciler) reconcileMonitoringResources() error {
 	}
 	for i := range promRuleList.Items {
 		obj := promRuleList.Items[i]
-		utils.AddLabel(obj, monLabelKey, monLabelValue)
+		// exclude ocs prometheus rules
+		ruleLabels := obj.GetLabels()
+		if v := ruleLabels["prometheus"]; v == "k8s" || v == "rook-prometheus" {
+			r.Log.Info("found ocs prometheus rules, excluding from discovery")
+			if vv := ruleLabels[monLabelKey]; vv == monLabelValue {
+				utils.RemoveLabel(obj, monLabelKey)
+				r.Log.Info(fmt.Sprintf("removed label %s=%s from %s", monLabelKey, monLabelValue, obj.GetName()))
+			}
+		} else {
+			utils.AddLabel(obj, monLabelKey, monLabelValue)
+		}
 		if err := r.update(obj); err != nil {
 			return err
 		}

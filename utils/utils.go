@@ -51,6 +51,12 @@ func AddLabel(obj metav1.Object, key string, value string) {
 	labels[key] = value
 }
 
+// RemoveLabel removes a label from the resource metadata.
+func RemoveLabel(obj metav1.Object, key string) {
+	labels := obj.GetLabels()
+	delete(labels, key)
+}
+
 func AddAnnotation(obj metav1.Object, key string, value string) {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {

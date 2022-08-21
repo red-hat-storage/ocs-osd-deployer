@@ -44,7 +44,7 @@ var pagerdutyAlerts = []string{
 	"CephClusterWarningState",
 	"CephOSDVersionMismatch",
 	"CephMonVersionMismatch",
-	"CephOSDFlapping",
+	"CephOSDFlapping", // Present.
 	"CephOSDDiskNotResponding",
 	"CephOSDDiskUnavailable",
 	"CephDataRecoveryTakingTooLong",
