@@ -1338,22 +1338,6 @@ func (r *ManagedOCSReconciler) reconcileMonitoringResources() error {
 	for i := range promRuleList.Items {
 		obj := promRuleList.Items[i]
 		utils.AddLabel(obj, monLabelKey, monLabelValue)
-		// remove unwanted annotations from the prometheus rule with the label "prometheus: rook-prometheus"
-		if v, ok := obj.GetLabels()["prometheus"]; ok && v == "rook-prometheus" {
-			unwantedRuleAnnotations := []string{"documentation"}
-			groups := obj.Spec.Groups
-			for groupIndex := range groups {
-				group := &groups[groupIndex]
-				for ruleIndex := range group.Rules {
-					rule := &group.Rules[ruleIndex]
-					if rule.Alert != "" {
-						for _, annotation := range unwantedRuleAnnotations {
-							delete(rule.Annotations, annotation)
-						}
-					}
-				}
-			}
-		}
 		if err := r.update(obj); err != nil {
 			return err
 		}

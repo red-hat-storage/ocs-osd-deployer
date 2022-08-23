@@ -155,6 +155,10 @@ var PrometheusTemplate = promv1.Prometheus{
 						Regex:        getRelableRegex(alerts, metrics),
 						Action:       "keep",
 					},
+					{
+						Regex:  "^documentation$",
+						Action: "labeldrop",
+					},
 				},
 			},
 		},
