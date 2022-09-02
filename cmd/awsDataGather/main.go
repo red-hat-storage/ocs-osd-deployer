@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
@@ -24,6 +23,8 @@ import (
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	log := ctrl.Log.WithName("main")
+
+	mainContext := context.Background()
 
 	namespace, found := os.LookupEnv("NAMESPACE")
 	if !found {
@@ -62,20 +63,17 @@ func main() {
 
 	// This will later be used as the OwnerReference for the data ConfigMap
 	var deployment appsv1.Deployment
-	err = utils.Retry(5, 1*time.Second, func() error {
-		err := k8sClient.Get(context.Background(), client.ObjectKey{
-			Name:      deploymentName,
-			Namespace: namespace,
-		}, &deployment)
-		return err
-	})
+	err = k8sClient.Get(mainContext, client.ObjectKey{
+		Name:      deploymentName,
+		Namespace: namespace,
+	}, &deployment)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Failed to find deployment '%s' in namespace '%s'", deploymentName, namespace))
 		os.Exit(1)
 	}
 
 	log.Info("Gathering AWS data")
-	if err := gatherAndSaveData(aws.IMDSv1Server, deployment, k8sClient); err != nil {
+	if err := gatherAndSaveData(aws.IMDSv1Server, deployment, k8sClient, mainContext); err != nil {
 		log.Error(err, "Failed to gather AWS data")
 		os.Exit(1)
 	}
@@ -94,10 +92,10 @@ func main() {
 	log.Info("AWS data gather program terminating")
 }
 
-func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClient client.Client) error {
+func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClient client.Client, context context.Context) error {
 	log := ctrl.Log.WithName("GatherData")
 
-	imdsClient := aws.NewIMDSClient(imdsServer, k8sClient)
+	imdsClient := aws.NewIMDSClient(imdsServer, k8sClient, context)
 
 	log.Info("Fetching AWS VPC IPv4 CIDR data")
 	if err := imdsClient.FetchIPv4CIDR(); err != nil {
@@ -115,7 +113,7 @@ func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClien
 		Name:       deployment.Name,
 		UID:        deployment.UID,
 	}
-	if err := imdsClient.CreateConfigMap(deployment.Namespace, owner); err != nil {
+	if err := imdsClient.WriteToConfigMap(deployment.Namespace, owner); err != nil {
 		return fmt.Errorf("Failed to create configmap: %v", err)
 	}
 

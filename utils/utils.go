@@ -106,9 +106,12 @@ func DeploymentNameFromPodName(podName string) (string, error) {
 	//Pod names created from deployments follow the convention:
 	// <deployment_name>-<pod-template-hash>-<uid>
 	// Therefore, we can get the deployment_name by omitting the last hyphened two sections
-	tmpStr := strings.Split(podName, "-")
-	if len(tmpStr) < 3 {
+	var i int
+	if i = strings.LastIndex(podName, "-"); i == -1 {
 		return "", fmt.Errorf("invalid pod name")
 	}
-	return strings.Join(tmpStr[:len(tmpStr)-2], "-"), nil
+	if i = strings.LastIndex(podName[0:i], "-"); i == -1 {
+		return "", fmt.Errorf("invalid pod name")
+	}
+	return podName[0:i], nil
 }

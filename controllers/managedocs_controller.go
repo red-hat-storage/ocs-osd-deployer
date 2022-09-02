@@ -1480,7 +1480,7 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			}
 
 			// Get the machine cidr
-			vpcCIDR, ok := awsConfigMap.Data[aws.CidrKey]
+			vpcCIDR, ok := awsConfigMap.Data[aws.CIDRKey]
 			if !ok {
 				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
 			}
@@ -1499,7 +1499,9 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			desired.Spec.Egress = append(
 				[]openshiftv1.EgressNetworkPolicyRule{
 					vpcEgressRule,
-				}, desired.Spec.Egress...)
+				},
+				desired.Spec.Egress...,
+			)
 		}
 
 		if r.deadMansSnitchSecret.UID == "" {

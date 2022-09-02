@@ -41,7 +41,7 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 		var awsConfigMap corev1.ConfigMap
 
 		BeforeEach(func() {
-			err := gatherAndSaveData("http://"+testMockerAddr, fakeDeployment, k8sClient)
+			err := gatherAndSaveData("http://"+testMockerAddr, fakeDeployment, k8sClient, context.TODO())
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -50,7 +50,7 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			By("having the VPC cidr key")
-			vpcCIDR, ok := awsConfigMap.Data[aws.CidrKey]
+			vpcCIDR, ok := awsConfigMap.Data[aws.CIDRKey]
 			Expect(ok).To(Equal(true))
 			Expect(vpcCIDR).To(Equal(fakeCIDR))
 
@@ -72,7 +72,7 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 
 		When("aws data gathering runs", func() {
 			BeforeEach(func() {
-				err := gatherAndSaveData("http://"+testMockerAddr, fakeDeployment, k8sClient)
+				err := gatherAndSaveData("http://"+testMockerAddr, fakeDeployment, k8sClient, context.TODO())
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -81,7 +81,7 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				By("adding VPC cidr key")
-				vpcCIDR, ok := configMap.Data[aws.CidrKey]
+				vpcCIDR, ok := configMap.Data[aws.CIDRKey]
 				Expect(ok).To(Equal(true))
 				Expect(vpcCIDR).To(Equal(fakeCIDR))
 
