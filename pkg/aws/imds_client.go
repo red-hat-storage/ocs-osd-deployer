@@ -16,7 +16,7 @@ const (
 	// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 	IMDSv1Server      = "http://169.254.169.254"
 	DataConfigMapName = "aws-data"
-	CidrKey           = "vpc-cidr"
+	CIDRKey           = "vpc-cidr"
 )
 
 /*
@@ -30,13 +30,15 @@ type IMDSClient struct {
 	imdsServerAddr string
 	k8sClient      client.Client
 	data           map[string]string
+	context        context.Context
 }
 
-func NewIMDSClient(imdsServerAddr string, k8sClient client.Client) IMDSClient {
+func NewIMDSClient(imdsServerAddr string, k8sClient client.Client, context context.Context) IMDSClient {
 	return IMDSClient{
 		imdsServerAddr: imdsServerAddr,
 		k8sClient:      k8sClient,
 		data:           map[string]string{},
+		context:        context,
 	}
 }
 
@@ -69,17 +71,17 @@ func (client *IMDSClient) FetchIPv4CIDR() error {
 		return fmt.Errorf("Could not get VPC CIDR using mac address %q: %v", mac, err)
 	}
 
-	client.data[CidrKey] = cidr
+	client.data[CIDRKey] = cidr
 
 	return nil
 }
 
-func (client *IMDSClient) CreateConfigMap(namespace string, owners ...metav1.OwnerReference) error {
+func (client *IMDSClient) WriteToConfigMap(namespace string, owners ...metav1.OwnerReference) error {
 	configMap := corev1.ConfigMap{}
 	configMap.Name = DataConfigMapName
 	configMap.Namespace = namespace
 
-	_, err := ctrl.CreateOrUpdate(context.Background(), client.k8sClient, &configMap, func() error {
+	_, err := ctrl.CreateOrUpdate(client.context, client.k8sClient, &configMap, func() error {
 		// Setting the owner of the configmap resource to this deployment that creates it.
 		// That way, the configmap will go away when the deployment does.
 		configMap.OwnerReferences = owners
