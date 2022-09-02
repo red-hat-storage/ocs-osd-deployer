@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -266,7 +265,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 		Owns(&promv1a1.AlertmanagerConfig{}).
 		Owns(&promv1.PrometheusRule{}).
 		Owns(&promv1.ServiceMonitor{}).
-		Owns(&openshiftv1.EgressNetworkPolicy{}).
+		// Owns(&openshiftv1.EgressNetworkPolicy{}).
 		Owns(&netv1.NetworkPolicy{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
@@ -370,9 +369,9 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.storageCluster.Name = storageClusterName
 	r.storageCluster.Namespace = r.namespace
 
-	r.egressNetworkPolicy = &openshiftv1.EgressNetworkPolicy{}
-	r.egressNetworkPolicy.Name = egressNetworkPolicyName
-	r.egressNetworkPolicy.Namespace = r.namespace
+	// r.egressNetworkPolicy = &openshiftv1.EgressNetworkPolicy{}
+	// r.egressNetworkPolicy.Name = egressNetworkPolicyName
+	// r.egressNetworkPolicy.Namespace = r.namespace
 
 	r.ingressNetworkPolicy = &netv1.NetworkPolicy{}
 	r.ingressNetworkPolicy.Name = ingressNetworkPolicyName
@@ -570,9 +569,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		if err := r.reconcilePrometheusProxyNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.reconcileEgressNetworkPolicy(); err != nil {
-			return ctrl.Result{}, err
-		}
+		// if err := r.reconcileEgressNetworkPolicy(); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
 		if err := r.reconcileIngressNetworkPolicy(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -1460,65 +1459,65 @@ func (r *ManagedOCSReconciler) reconcileRookCephOperatorConfig() error {
 	return nil
 }
 
-func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
-	// Fix for non-converged deployment type will be provided in upcoming PR
-	if r.DeploymentType != convergedDeploymentType {
-		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
-		return nil
-	}
-	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
-		if err := r.own(r.egressNetworkPolicy); err != nil {
-			return err
-		}
-		desired := templates.EgressNetworkPolicyTemplate.DeepCopy()
+// func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
+// 	// Fix for non-converged deployment type will be provided in upcoming PR
+// 	if r.DeploymentType != convergedDeploymentType {
+// 		r.Log.Info("Non converged deployment, skipping reconcile for egress network policy")
+// 		return nil
+// 	}
+// 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.egressNetworkPolicy, func() error {
+// 		if err := r.own(r.egressNetworkPolicy); err != nil {
+// 			return err
+// 		}
+// 		desired := templates.EgressNetworkPolicyTemplate.DeepCopy()
 
-		if r.deadMansSnitchSecret.UID == "" {
-			if err := r.get(r.deadMansSnitchSecret); err != nil {
-				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
-			}
-		}
-		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
-		if dmsURL == "" {
-			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
-		}
-		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
-		if err != nil {
-			return fmt.Errorf("Unable to parse DMS url: %v", err)
-		}
+// 		if r.deadMansSnitchSecret.UID == "" {
+// 			if err := r.get(r.deadMansSnitchSecret); err != nil {
+// 				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+// 			}
+// 		}
+// 		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
+// 		if dmsURL == "" {
+// 			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
+// 		}
+// 		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
+// 		if err != nil {
+// 			return fmt.Errorf("Unable to parse DMS url: %v", err)
+// 		}
 
-		if r.smtpSecret.UID == "" {
-			if err := r.get(r.smtpSecret); err != nil {
-				return fmt.Errorf("Unable to get SMTP secret: %v", err)
-			}
-		}
-		smtpHost := string(r.smtpSecret.Data["host"])
-		if smtpHost == "" {
-			return fmt.Errorf("smtp secret does not contain a host entry")
-		}
+// 		if r.smtpSecret.UID == "" {
+// 			if err := r.get(r.smtpSecret); err != nil {
+// 				return fmt.Errorf("Unable to get SMTP secret: %v", err)
+// 			}
+// 		}
+// 		smtpHost := string(r.smtpSecret.Data["host"])
+// 		if smtpHost == "" {
+// 			return fmt.Errorf("smtp secret does not contain a host entry")
+// 		}
 
-		dmsEgressRule := openshiftv1.EgressNetworkPolicyRule{}
-		dmsEgressRule.To.DNSName = snitchURL.Hostname()
-		dmsEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+// 		dmsEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+// 		dmsEgressRule.To.DNSName = snitchURL.Hostname()
+// 		dmsEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
 
-		smtpEgressRule := openshiftv1.EgressNetworkPolicyRule{}
-		smtpEgressRule.To.DNSName = smtpHost
-		smtpEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+// 		smtpEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+// 		smtpEgressRule.To.DNSName = smtpHost
+// 		smtpEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
 
-		desired.Spec.Egress = append(
-			[]openshiftv1.EgressNetworkPolicyRule{
-				dmsEgressRule,
-				smtpEgressRule,
-			},
-			desired.Spec.Egress...,
-		)
-		r.egressNetworkPolicy.Spec = desired.Spec
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("Failed to update egressNetworkPolicy: %v", err)
-	}
-	return nil
-}
+// 		desired.Spec.Egress = append(
+// 			[]openshiftv1.EgressNetworkPolicyRule{
+// 				dmsEgressRule,
+// 				smtpEgressRule,
+// 			},
+// 			desired.Spec.Egress...,
+// 		)
+// 		r.egressNetworkPolicy.Spec = desired.Spec
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return fmt.Errorf("Failed to update egressNetworkPolicy: %v", err)
+// 	}
+// 	return nil
+// }
 
 func (r *ManagedOCSReconciler) reconcileIngressNetworkPolicy() error {
 	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.ingressNetworkPolicy, func() error {

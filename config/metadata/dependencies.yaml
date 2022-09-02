@@ -6,4 +6,4 @@ dependencies:
 - type: olm.package
   value:
     packageName: odf-operator
-    version: "4.10.5"
+    version: "4.11.0"
