@@ -73,6 +73,13 @@ var alerts = []string{
 
 var PrometheusTemplate = promv1.Prometheus{
 	Spec: promv1.PrometheusSpec{
+		AdditionalScrapeConfigs: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: "prometheus-additional-scrape-config",
+			},
+			Key:      "additional-scrape-config.yaml",
+			Optional: &_false,
+		},
 		ExternalLabels:         map[string]string{},
 		ServiceAccountName:     "prometheus-k8s",
 		ServiceMonitorSelector: &resourceSelector,
@@ -154,10 +161,6 @@ var PrometheusTemplate = promv1.Prometheus{
 						SourceLabels: []string{"__name__", "alertname"},
 						Regex:        getRelableRegex(alerts, metrics),
 						Action:       "keep",
-					},
-					{
-						Regex:  "^documentation$",
-						Action: "labeldrop",
 					},
 				},
 			},

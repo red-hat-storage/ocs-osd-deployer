@@ -1307,6 +1307,61 @@ func (r *ManagedOCSReconciler) reconcileK8SMetricsServiceMonitor() error {
 func (r *ManagedOCSReconciler) reconcileMonitoringResources() error {
 	r.Log.Info("reconciling monitoring resources")
 
+	additionalScrapeConfigSecretName := "prometheus-additional-scrape-config"
+	additionalScrapeConfigSecretKey := "additional-scrape-config.yaml"
+	additionalScrapeConfigSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      additionalScrapeConfigSecretName,
+			Namespace: r.namespace,
+		},
+	}
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, additionalScrapeConfigSecret, func() error {
+		if err := r.own(additionalScrapeConfigSecret); err != nil {
+			return err
+		}
+
+		// - job_name: "ocs-osd-controller-manager-metrics-service"
+		//   metric_relabel_configs:
+		//   - regex: "^documentation$"
+		//     action: labeldrop
+
+		additionalScrapeConfig := []struct {
+			JobName              string `yaml:"job_name"`
+			MetricRelabelConfigs []struct {
+				Regex  string `yaml:"regex"`
+				Action string `yaml:"action"`
+			} `yaml:"metric_relabel_configs"`
+		}{
+			{
+				"ocs-osd-controller-manager-metrics-service",
+				[]struct {
+					Regex  string `yaml:"regex"`
+					Action string `yaml:"action"`
+				}{
+					{
+						"^endpoint$",
+						"labeldrop",
+					},
+				},
+			},
+		}
+
+		config, err := yaml.Marshal(additionalScrapeConfig)
+		if err != nil {
+			return fmt.Errorf("unable to encode additional scrape config: %v", err)
+		}
+
+		additionalScrapeConfigSecret.Data = map[string][]byte{
+			additionalScrapeConfigSecretKey: config,
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("unable to create/update AdditionalScrapeConfigSecret: %v", err)
+	}
+
 	podMonitorList := promv1.PodMonitorList{}
 	if err := r.list(&podMonitorList); err != nil {
 		return fmt.Errorf("Could not list pod monitors: %v", err)
