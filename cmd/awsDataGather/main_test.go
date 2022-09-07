@@ -5,8 +5,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
-	utils "github.com/red-hat-storage/ocs-osd-deployer/testutils"
+	tutils "github.com/red-hat-storage/ocs-osd-deployer/testutils"
+	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +20,7 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 
 	configMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      aws.DataConfigMapName,
+			Name:      utils.DataConfigMapName,
 			Namespace: testNamespace,
 		},
 	}
@@ -46,11 +46,11 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 		})
 
 		It("should have created a configmap that is valid...", func() {
-			err := k8sClient.Get(ctx, utils.GetResourceKey(&configMap), &awsConfigMap)
+			err := k8sClient.Get(ctx, tutils.GetResourceKey(&configMap), &awsConfigMap)
 			Expect(err).ToNot(HaveOccurred())
 
 			By("having the VPC cidr key")
-			vpcCIDR, ok := awsConfigMap.Data[aws.CIDRKey]
+			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
 			Expect(ok).To(Equal(true))
 			Expect(vpcCIDR).To(Equal(fakeCIDR))
 
@@ -77,11 +77,11 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 			})
 
 			It("should have updated the configmap", func() {
-				err := k8sClient.Get(ctx, utils.GetResourceKey(&configMap), &configMap)
+				err := k8sClient.Get(ctx, tutils.GetResourceKey(&configMap), &configMap)
 				Expect(err).ToNot(HaveOccurred())
 
 				By("adding VPC cidr key")
-				vpcCIDR, ok := configMap.Data[aws.CIDRKey]
+				vpcCIDR, ok := configMap.Data[utils.CIDRKey]
 				Expect(ok).To(Equal(true))
 				Expect(vpcCIDR).To(Equal(fakeCIDR))
 

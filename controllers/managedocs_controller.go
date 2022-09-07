@@ -57,7 +57,6 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v1alpha1"
 	v1 "github.com/red-hat-storage/ocs-osd-deployer/api/v1alpha1"
-	"github.com/red-hat-storage/ocs-osd-deployer/pkg/aws"
 	"github.com/red-hat-storage/ocs-osd-deployer/templates"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
 	netv1 "k8s.io/api/networking/v1"
@@ -208,7 +207,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 					}
 				} else if name == rookConfigMapName {
 					return true
-				} else if name == aws.DataConfigMapName {
+				} else if name == utils.DataConfigMapName {
 					return true
 				}
 				return false
@@ -1473,14 +1472,14 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 		if r.DeploymentType != convergedDeploymentType {
 			// Get the aws config map
 			awsConfigMap := &corev1.ConfigMap{}
-			awsConfigMap.Name = aws.DataConfigMapName
+			awsConfigMap.Name = utils.DataConfigMapName
 			awsConfigMap.Namespace = r.namespace
 			if err := r.get(awsConfigMap); err != nil {
 				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
 			}
 
 			// Get the machine cidr
-			vpcCIDR, ok := awsConfigMap.Data[aws.CIDRKey]
+			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
 			if !ok {
 				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
 			}
