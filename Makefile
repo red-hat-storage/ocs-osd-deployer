@@ -1,8 +1,8 @@
 # ===== Overridable Variables ===== #
 
 # Current Operator version
-VERSION ?= 2.0.5
-REPLACES ?= 2.0.4
+VERSION ?= 2.0.6
+REPLACES ?= 2.0.5
 
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
@@ -28,12 +28,12 @@ ifeq ($(USE_IMAGE_DIGESTS), true)
     BUNDLE_METADATA_OPTS += --use-image-digests
 endif
 
-BUNDLE_IMGS ?= $(BUNDLE_IMG) 
+BUNDLE_IMGS ?= $(BUNDLE_IMG)
 CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(VERSION)
 
 ifneq ($(origin CATALOG_BASE_IMG), undefined)
 	FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
-endif 
+endif
 
 LOCALBIN ?= $(CURDIR)/bin
 $(LOCALBIN):
