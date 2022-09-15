@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -66,43 +67,44 @@ const (
 )
 
 const (
-	managedOCSName                     = "managedocs"
-	storageClusterName                 = "ocs-storagecluster"
-	prometheusName                     = "managed-ocs-prometheus"
-	prometheusServiceName              = "prometheus"
-	alertmanagerName                   = "managed-ocs-alertmanager"
-	alertmanagerConfigName             = "managed-ocs-alertmanager-config"
-	dmsRuleName                        = "dms-monitor-rule"
-	storageSizeKey                     = "size"
-	storageUnitKey                     = "unit"
-	onboardingTicketKey                = "onboarding-ticket"
-	storageProviderEndpointKey         = "storage-provider-endpoint"
-	enableMCGKey                       = "enable-mcg"
-	notificationEmailKeyPrefix         = "notification-email"
-	onboardingValidationKey            = "onboarding-validation-key"
-	deviceSetName                      = "default"
-	storageClassRbdName                = "ocs-storagecluster-ceph-rbd"
-	storageClassCephFSName             = "ocs-storagecluster-cephfs"
-	deployerCSVPrefix                  = "ocs-osd-deployer"
-	ocsOperatorName                    = "ocs-operator"
-	mcgOperatorName                    = "mcg-operator"
-	egressNetworkPolicyName            = "egress-rule"
-	ingressNetworkPolicyName           = "ingress-rule"
-	cephIngressNetworkPolicyName       = "ceph-ingress-rule"
-	providerApiServerNetworkPolicyName = "provider-api-server-rule"
-	prometheusProxyNetworkPolicyName   = "prometheus-proxy-rule"
-	monLabelKey                        = "app"
-	monLabelValue                      = "managed-ocs"
-	rookConfigMapName                  = "rook-ceph-operator-config"
-	k8sMetricsServiceMonitorName       = "k8s-metrics-service-monitor"
-	alertRelabelConfigSecretName       = "managed-ocs-alert-relabel-config-secret"
-	alertRelabelConfigSecretKey        = "alertrelabelconfig.yaml"
-	onboardingValidationKeySecretName  = "onboarding-ticket-key"
-	convergedDeploymentType            = "converged"
-	consumerDeploymentType             = "consumer"
-	providerDeploymentType             = "provider"
-	rhobsRemoteWriteConfigIdSecretKey  = "prom-remote-write-config-id"
-	rhobsRemoteWriteConfigSecretName   = "prom-remote-write-config-secret"
+	managedOCSName                       = "managedocs"
+	storageClusterName                   = "ocs-storagecluster"
+	prometheusName                       = "managed-ocs-prometheus"
+	prometheusServiceName                = "prometheus"
+	alertmanagerName                     = "managed-ocs-alertmanager"
+	alertmanagerConfigName               = "managed-ocs-alertmanager-config"
+	dmsRuleName                          = "dms-monitor-rule"
+	storageSizeKey                       = "size"
+	storageUnitKey                       = "unit"
+	onboardingTicketKey                  = "onboarding-ticket"
+	storageProviderEndpointKey           = "storage-provider-endpoint"
+	enableMCGKey                         = "enable-mcg"
+	notificationEmailKeyPrefix           = "notification-email"
+	onboardingValidationKey              = "onboarding-validation-key"
+	deviceSetName                        = "default"
+	storageClassRbdName                  = "ocs-storagecluster-ceph-rbd"
+	storageClassCephFSName               = "ocs-storagecluster-cephfs"
+	deployerCSVPrefix                    = "ocs-osd-deployer"
+	ocsOperatorName                      = "ocs-operator"
+	mcgOperatorName                      = "mcg-operator"
+	egressNetworkPolicyName              = "egress-rule"
+	ingressNetworkPolicyName             = "ingress-rule"
+	cephIngressNetworkPolicyName         = "ceph-ingress-rule"
+	providerApiServerNetworkPolicyName   = "provider-api-server-rule"
+	prometheusProxyNetworkPolicyName     = "prometheus-proxy-rule"
+	monLabelKey                          = "app"
+	monLabelValue                        = "managed-ocs"
+	rookConfigMapName                    = "rook-ceph-operator-config"
+	k8sMetricsServiceMonitorName         = "k8s-metrics-service-monitor"
+	alertRelabelConfigSecretName         = "managed-ocs-alert-relabel-config-secret"
+	alertRelabelConfigSecretKey          = "alertrelabelconfig.yaml"
+	onboardingValidationKeySecretName    = "onboarding-ticket-key"
+	convergedDeploymentType              = "converged"
+	consumerDeploymentType               = "consumer"
+	providerDeploymentType               = "provider"
+	rhobsRemoteWriteConfigIdSecretKey    = "prom-remote-write-config-id"
+	rhobsRemoteWriteConfigSecretName     = "prom-remote-write-config-secret"
+	csiKMSConnectionDetailsConfigMapName = "csi-kms-connection-details"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -126,30 +128,31 @@ type ManagedOCSReconciler struct {
 	RHOBSEndpoint                string
 	RHSSOTokenEndpoint           string
 
-	ctx                            context.Context
-	managedOCS                     *v1.ManagedOCS
-	storageCluster                 *ocsv1.StorageCluster
-	egressNetworkPolicy            *openshiftv1.EgressNetworkPolicy
-	ingressNetworkPolicy           *netv1.NetworkPolicy
-	cephIngressNetworkPolicy       *netv1.NetworkPolicy
-	providerAPIServerNetworkPolicy *netv1.NetworkPolicy
-	prometheusProxyNetworkPolicy   *netv1.NetworkPolicy
-	prometheus                     *promv1.Prometheus
-	prometheusService              *corev1.Service
-	dmsRule                        *promv1.PrometheusRule
-	alertmanager                   *promv1.Alertmanager
-	pagerdutySecret                *corev1.Secret
-	deadMansSnitchSecret           *corev1.Secret
-	smtpSecret                     *corev1.Secret
-	alertmanagerConfig             *promv1a1.AlertmanagerConfig
-	alertRelabelConfigSecret       *corev1.Secret
-	k8sMetricsServiceMonitor       *promv1.ServiceMonitor
-	namespace                      string
-	reconcileStrategy              v1.ReconcileStrategy
-	addonParams                    map[string]string
-	onboardingValidationKeySecret  *corev1.Secret
-	prometheusKubeRBACConfigMap    *corev1.ConfigMap
-	rhobsRemoteWriteConfigSecret   *corev1.Secret
+	ctx                              context.Context
+	managedOCS                       *v1.ManagedOCS
+	storageCluster                   *ocsv1.StorageCluster
+	egressNetworkPolicy              *openshiftv1.EgressNetworkPolicy
+	ingressNetworkPolicy             *netv1.NetworkPolicy
+	cephIngressNetworkPolicy         *netv1.NetworkPolicy
+	providerAPIServerNetworkPolicy   *netv1.NetworkPolicy
+	prometheusProxyNetworkPolicy     *netv1.NetworkPolicy
+	prometheus                       *promv1.Prometheus
+	prometheusService                *corev1.Service
+	dmsRule                          *promv1.PrometheusRule
+	alertmanager                     *promv1.Alertmanager
+	pagerdutySecret                  *corev1.Secret
+	deadMansSnitchSecret             *corev1.Secret
+	smtpSecret                       *corev1.Secret
+	alertmanagerConfig               *promv1a1.AlertmanagerConfig
+	alertRelabelConfigSecret         *corev1.Secret
+	k8sMetricsServiceMonitor         *promv1.ServiceMonitor
+	namespace                        string
+	reconcileStrategy                v1.ReconcileStrategy
+	addonParams                      map[string]string
+	onboardingValidationKeySecret    *corev1.Secret
+	prometheusKubeRBACConfigMap      *corev1.ConfigMap
+	rhobsRemoteWriteConfigSecret     *corev1.Secret
+	csiKMSConnectionDetailsConfigMap *corev1.ConfigMap
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -440,6 +443,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.rhobsRemoteWriteConfigSecret = &corev1.Secret{}
 	r.rhobsRemoteWriteConfigSecret.Name = r.RHOBSSecretName
 	r.rhobsRemoteWriteConfigSecret.Namespace = r.namespace
+
+	r.csiKMSConnectionDetailsConfigMap = &corev1.ConfigMap{}
+	r.csiKMSConnectionDetailsConfigMap.Name = csiKMSConnectionDetailsConfigMapName
+	r.csiKMSConnectionDetailsConfigMap.Namespace = r.namespace
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -534,6 +541,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileCSV(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileCSIKMSConnectionDetailsConfigMap(); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileAlertRelabelConfigSecret(); err != nil {
@@ -895,6 +905,41 @@ func (r *ManagedOCSReconciler) reconcileOnboardingValidationSecret() error {
 	if err != nil {
 		return fmt.Errorf("Failed to update onboardingValidationKeySecret: %v", err)
 	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileCSIKMSConnectionDetailsConfigMap() error {
+	if r.DeploymentType != consumerDeploymentType || r.addonParams["enable-encryption"] != "true" {
+		r.Log.Info("Non consumer deployment, skipping reconcile for csi-kms-connection-details configMap")
+		return nil
+	}
+	r.Log.Info("Reconciling csi-kms-connection-details configMap")
+
+	_, err := ctrl.CreateOrUpdate(r.ctx, r.Client, r.csiKMSConnectionDetailsConfigMap, func() error {
+		if err := r.own(r.csiKMSConnectionDetailsConfigMap); err != nil {
+			return err
+		}
+
+		encryptionMetadata := struct {
+			EncryptionKMSType string `json:"encryptionKMSType"`
+			SecretName        string `json:"secretName"`
+		}{
+			EncryptionKMSType: "aws-sts-metadata",
+			SecretName:        "tenant-aws-secret",
+		}
+
+		data, _ := json.Marshal(encryptionMetadata)
+
+		r.csiKMSConnectionDetailsConfigMap.Data = map[string]string{
+			"encryption-with-aws-kms": string(data), // encryption-with-aws-kms will be used by customer to create storageClassClaim
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to create csi-kms-connection-details configMap: %v", err)
+	}
+
 	return nil
 }
 
