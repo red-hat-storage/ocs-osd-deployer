@@ -43,7 +43,8 @@ func main() {
 	// so we derive it from the pod name.
 	deploymentName, err := utils.DeploymentNameFromPodName(podName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr,
+		fmt.Fprintf(
+			os.Stderr,
 			"Could not determine deployment name from pod name (%s)",
 			podName)
 		os.Exit(1)
@@ -71,29 +72,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	var backoff time.Duration = 2
+	var backoff time.Duration = 1
+	var maxSleep time.Duration = 5
 	for {
+		var sleep time.Duration
 		log.Info("Gathering AWS data")
-		if err := gatherAndSaveData(utils.IMDSv1Server, deployment, k8sClient, mainContext); err != nil {
+		if err := gatherAndSaveData(utils.IMDSv1Server, deployment, k8sClient, mainContext); err == nil {
+			log.Info("AWS data gathering successfully completed!")
+			sleep = maxSleep
+			// Reset the backoff counter since data gathering succeeded.
+			backoff = 1
+		} else {
 			log.Error(err, "Failed to gather AWS data")
-
-			log.Info("Sleeping for %d seconds before trying again...", backoff)
-			time.Sleep(backoff * time.Second)
-
-			backoff = backoff * backoff
-			if backoff > 256 {
-				backoff = 256
+			sleep = backoff
+			backoff = 2 * backoff
+			if backoff > maxSleep {
+				backoff = maxSleep
 			}
-
-			continue
 		}
-
-		// Reset the backoff counter since data gathering succeeded.
-		backoff = 1
-
-		log.Info("AWS data gathering successfully completed!")
-		time.Sleep(5 * time.Minute)
-
+		log.Info("Sleeping for %d minutes before next the fetch...", sleep)
+		time.Sleep(sleep * time.Minute)
 	}
 }
 
@@ -106,34 +104,29 @@ func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClien
 		return fmt.Errorf("Failed to get VPC IPv4 CIDR: %v", err)
 	}
 
-	awsData := map[string]string{
-		utils.CIDRKey: cidr,
-	}
-
 	log.Info("Creating Config Map with AWS data")
-	// Setting the owner of the configmap resource to this deployment that creates it.
-	// That way, the configmap will go away when the deployment does.
-	// The version and kind are being manually inserted because the deployment struct doesn't have it.
-	// See: https://github.com/kubernetes/client-go/issues/861#issuecomment-686806279
-	owner := metav1.OwnerReference{
-		APIVersion: "apps/v1",
-		Kind:       "Deployment",
-		Name:       deployment.Name,
-		UID:        deployment.UID,
-	}
 
 	configMap := corev1.ConfigMap{}
-	configMap.Name = utils.DataConfigMapName
+	configMap.Name = utils.IMDSConfigMapName
 	configMap.Namespace = deployment.Namespace
 
 	_, err = ctrl.CreateOrUpdate(context, k8sClient, &configMap, func() error {
 		// Setting the owner of the configmap resource to this deployment that creates it.
 		// That way, the configmap will go away when the deployment does.
+		// The version and kind are being manually inserted because the deployment struct doesn't have it.
+		// See: https://github.com/kubernetes/client-go/issues/861#issuecomment-686806279
 		configMap.OwnerReferences = []metav1.OwnerReference{
-			owner,
+			{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       deployment.Name,
+				UID:        deployment.UID,
+			},
 		}
 
-		configMap.Data = awsData
+		configMap.Data = map[string]string{
+			utils.CIDRKey: cidr,
+		}
 
 		return nil
 	})

@@ -20,7 +20,7 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 
 	configMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.DataConfigMapName,
+			Name:      utils.IMDSConfigMapName,
 			Namespace: testNamespace,
 		},
 	}

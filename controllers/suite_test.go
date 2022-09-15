@@ -233,7 +233,7 @@ var _ = BeforeSuite(func() {
 
 		// Create the aws data config map
 		awsConfigMap := &corev1.ConfigMap{}
-		awsConfigMap.Name = utils.DataConfigMapName
+		awsConfigMap.Name = utils.IMDSConfigMapName
 		awsConfigMap.Namespace = testPrimaryNamespace
 		awsConfigMap.Data = map[string]string{
 			utils.CIDRKey: "10.0.0.0/16",

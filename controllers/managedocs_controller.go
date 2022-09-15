@@ -207,7 +207,7 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 					}
 				} else if name == rookConfigMapName {
 					return true
-				} else if name == utils.DataConfigMapName {
+				} else if name == utils.IMDSConfigMapName {
 					return true
 				}
 				return false
@@ -1472,7 +1472,7 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 		if r.DeploymentType != convergedDeploymentType {
 			// Get the aws config map
 			awsConfigMap := &corev1.ConfigMap{}
-			awsConfigMap.Name = utils.DataConfigMapName
+			awsConfigMap.Name = utils.IMDSConfigMapName
 			awsConfigMap.Namespace = r.namespace
 			if err := r.get(awsConfigMap); err != nil {
 				return fmt.Errorf("Unable to get AWS ConfigMap: %v", err)
