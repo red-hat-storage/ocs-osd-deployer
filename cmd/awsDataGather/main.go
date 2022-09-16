@@ -19,6 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
+const maxSleep time.Duration = 300
+
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	log := ctrl.Log.WithName("main")
@@ -27,14 +29,18 @@ func main() {
 
 	namespace, found := os.LookupEnv("NAMESPACE")
 	if !found {
-		fmt.Fprintf(os.Stderr,
-			"NAMESPACE environment variable not found\n")
+		fmt.Fprintf(
+			os.Stderr,
+			"NAMESPACE environment variable not found\n",
+		)
 		os.Exit(1)
 	}
 	podName, found := os.LookupEnv("POD_NAME")
 	if !found {
-		fmt.Fprintf(os.Stderr,
-			"POD_NAME environment variable not found\n")
+		fmt.Fprintf(
+			os.Stderr,
+			"POD_NAME environment variable not found\n",
+		)
 		os.Exit(1)
 	}
 
@@ -73,7 +79,6 @@ func main() {
 	}
 
 	var backoff time.Duration = 1
-	var maxSleep time.Duration = 5
 	for {
 		var sleep time.Duration
 		log.Info("Gathering AWS data")
@@ -90,8 +95,8 @@ func main() {
 				backoff = maxSleep
 			}
 		}
-		log.Info("Sleeping for %d minutes before next the fetch...", sleep)
-		time.Sleep(sleep * time.Minute)
+		log.Info("Sleeping for %d seconds before next the fetch...", sleep)
+		time.Sleep(sleep * time.Second)
 	}
 }
 
