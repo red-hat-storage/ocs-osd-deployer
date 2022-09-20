@@ -1652,9 +1652,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the EgressNetworkPolicy resource is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				// Get an updated EgressNetworkPolicy
 				egress := egressNetworkPolicyTemplate.DeepCopy()
 				egressKey := utils.GetResourceKey(egress)
@@ -1677,9 +1674,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the SNITCH_URL value in dms secret is modified", func() {
 			It("should update the EgressNetworkPolicy resource with the new snitch domain", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				dmsSecret := dmsSecretTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(dmsSecret), dmsSecret)).Should(Succeed())
 				dmsSecret.Data["SNITCH_URL"] = []byte("https://test.in/4a029adb4c")
@@ -1701,9 +1695,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the host value in smtp secret is modified", func() {
 			It("should update the EgressNetworkPolicy resource with the new host", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				smtpSecret := smtpSecretTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(smtpSecret), smtpSecret)).Should(Succeed())
 				smtpSecret.Data["host"] = []byte("test-host-2")
@@ -1725,9 +1716,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the EgressNetworkPolicy resource is deleted", func() {
 			It("should create a new EgressNetworkPolicy in the namespace", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				// Delete the EgressNetworkPolicy resource
 				Expect(k8sClient.Delete(ctx, egressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
@@ -1737,9 +1725,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the ingress NetworkPolicy resource is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				// Get an updated NetworkPolicy
 				ingress := ingressNetworkPolicyTemplate.DeepCopy()
 				ingressKey := utils.GetResourceKey(ingress)
@@ -1760,9 +1745,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the ingress NetworkPolicy resource is deleted", func() {
 			It("should create a new ingress NetworkPolicy in the namespace", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				// Delete the NetworkPolicy resource
 				Expect(k8sClient.Delete(ctx, ingressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
@@ -1772,9 +1754,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the ceph ingress NetworkPolicy resource is modified", func() {
 			It("should revert the changes and bring the resource back to its managed state", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				// Get an updated NetworkPolicy
 				cephIngress := cephIngressNetworkPolicyTemplate.DeepCopy()
 				cephIngressKey := utils.GetResourceKey(cephIngress)
@@ -1795,9 +1774,6 @@ var _ = Describe("ManagedOCS controller", func() {
 		})
 		When("the ceph ingress NetworkPolicy resource is deleted", func() {
 			It("should create a new ingress NetworkPolicy in the namespace", func() {
-				if testReconciler.DeploymentType != convergedDeploymentType {
-					Skip(fmt.Sprintf("Skipping this test for %v deployment till we implement network policy for it ", testReconciler.DeploymentType))
-				}
 				// Delete the NetworkPolicy resource
 				Expect(k8sClient.Delete(ctx, cephIngressNetworkPolicyTemplate.DeepCopy())).Should(Succeed())
 
