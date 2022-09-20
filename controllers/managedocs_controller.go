@@ -909,8 +909,8 @@ func (r *ManagedOCSReconciler) reconcileOnboardingValidationSecret() error {
 }
 
 func (r *ManagedOCSReconciler) reconcileCSIKMSConnectionDetailsConfigMap() error {
-	if r.DeploymentType != consumerDeploymentType || r.addonParams["enable-encryption"] != "true" {
-		r.Log.Info("Non consumer deployment, skipping reconcile for csi-kms-connection-details configMap")
+	if r.DeploymentType != consumerDeploymentType {
+		r.Log.Info("Non consumer deployment, skipping reconcile for csi-kms-connection-details config map")
 		return nil
 	}
 	r.Log.Info("Reconciling csi-kms-connection-details configMap")
@@ -925,7 +925,7 @@ func (r *ManagedOCSReconciler) reconcileCSIKMSConnectionDetailsConfigMap() error
 			SecretName        string `json:"secretName"`
 		}{
 			EncryptionKMSType: "aws-sts-metadata",
-			SecretName:        "tenant-aws-secret",
+			SecretName:        "tenant-aws-secret", // user need to create a secret with this name
 		}
 
 		data, _ := json.Marshal(encryptionMetadata)
