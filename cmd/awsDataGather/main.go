@@ -95,7 +95,7 @@ func main() {
 				backoff = maxSleep
 			}
 		}
-		log.Info("Sleeping for %d seconds before next the fetch...", sleep)
+		log.Info(fmt.Sprintf("Sleeping for %d seconds before next the fetch...", sleep))
 		time.Sleep(sleep * time.Second)
 	}
 }
