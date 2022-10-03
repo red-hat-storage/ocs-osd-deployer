@@ -217,9 +217,10 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible => github.com/openshift/api v0.0.0-20201203102015-275406142edb
-## explicit; go 1.15
+# github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible => github.com/openshift/api v0.0.0-20220112144624-6db10b227818
+## explicit; go 1.16
 github.com/openshift/api/config/v1
+github.com/openshift/api/console/v1alpha1
 github.com/openshift/api/network/v1
 github.com/openshift/api/quota/v1
 github.com/openshift/api/security/v1
@@ -721,7 +722,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 sigs.k8s.io/yaml
 # github.com/go-logr/logr => github.com/go-logr/logr v0.4.0
 # github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v0.20.4-openstorage-rc3
-# github.com/openshift/api => github.com/openshift/api v0.0.0-20201203102015-275406142edb
+# github.com/openshift/api => github.com/openshift/api v0.0.0-20220112144624-6db10b227818
 # github.com/operator-framework/api => github.com/operator-framework/api v0.1.1
 # github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20190424153033-d3245f150225
 # k8s.io/api => k8s.io/api v0.21.3

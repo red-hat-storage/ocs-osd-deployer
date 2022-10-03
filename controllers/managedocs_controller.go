@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ import (
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
+	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
@@ -104,6 +106,7 @@ const (
 	providerDeploymentType             = "provider"
 	rhobsRemoteWriteConfigIdSecretKey  = "prom-remote-write-config-id"
 	rhobsRemoteWriteConfigSecretName   = "prom-remote-write-config-secret"
+	ocpConsolePluginName               = "odf-console"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -151,6 +154,7 @@ type ManagedOCSReconciler struct {
 	onboardingValidationKeySecret  *corev1.Secret
 	prometheusKubeRBACConfigMap    *corev1.ConfigMap
 	rhobsRemoteWriteConfigSecret   *corev1.Secret
+	ocpConsolePlugin               *consolev1alpha1.ConsolePlugin
 }
 
 // Add necessary rbac permissions for managedocs finalizer in order to set blockOwnerDeletion.
@@ -443,6 +447,10 @@ func (r *ManagedOCSReconciler) initReconciler(ctx context.Context, req ctrl.Requ
 	r.rhobsRemoteWriteConfigSecret = &corev1.Secret{}
 	r.rhobsRemoteWriteConfigSecret.Name = r.RHOBSSecretName
 	r.rhobsRemoteWriteConfigSecret.Namespace = r.namespace
+
+	r.ocpConsolePlugin = &consolev1alpha1.ConsolePlugin{}
+	r.ocpConsolePlugin.Name = ocpConsolePluginName
+	r.ocpConsolePlugin.Namespace = r.namespace
 }
 
 func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
@@ -582,6 +590,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 			return ctrl.Result{}, err
 		}
 		if err := r.reconcileProviderAPIServerNetworkPolicy(); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.reconcileOCSConsolePlugin(); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -1763,6 +1774,58 @@ func (r *ManagedOCSReconciler) updateMCGCSV(csv *opv1a1.ClusterServiceVersion) e
 		if err := r.update(csv); err != nil {
 			return fmt.Errorf("Failed to update MCG CSV: %v", err)
 		}
+	}
+	return nil
+}
+
+func (r *ManagedOCSReconciler) reconcileOCSConsolePlugin() error {
+	// Console UI plugin is used only in 'provider' / 'consumer' deployment types,
+	// for any other deployment type opt out
+	if r.DeploymentType != consumerDeploymentType && r.DeploymentType != providerDeploymentType {
+		r.Log.Info("Non provider/consumer deployment, skipping reconcile for OCS ConsolePlugin",
+			"Current DeploymentType", r.DeploymentType)
+		return nil
+	}
+	r.Log.Info("Reconciling OCSConsolePlugin")
+	if err := r.get(r.ocpConsolePlugin); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if r.ocpConsolePlugin.UID == "" {
+		// ODF Operator has to bring this CR,
+		// so if OCP ConsolePlugin is not ready, we ruturn silently
+		r.Log.Info("OCSConsolePlugin CR not found, skipping console proxy configuration")
+		return nil
+	}
+	expectedProxy := templates.ConsolePluginProxyTemplate.DeepCopy()
+	expectedProxy.Service.Name = prometheusServiceName
+	expectedProxy.Service.Namespace = r.namespace
+
+	var matchingProxy *consolev1alpha1.ConsolePluginProxy
+	for i := range r.ocpConsolePlugin.Spec.Proxy {
+		currProxy := &r.ocpConsolePlugin.Spec.Proxy[i]
+		if currProxy.Service.Name == expectedProxy.Service.Name &&
+			currProxy.Service.Namespace == expectedProxy.Service.Namespace {
+			matchingProxy = currProxy
+			break
+		}
+	}
+	shouldUpdateConsolePlugin := false
+	if matchingProxy == nil {
+		// if we didn't find any matching ConsolePluginProxy, append the expected proxy
+		r.ocpConsolePlugin.Spec.Proxy = append(r.ocpConsolePlugin.Spec.Proxy, *expectedProxy)
+		shouldUpdateConsolePlugin = true
+	} else if !reflect.DeepEqual(*matchingProxy, *expectedProxy) {
+		// if both, expected and matching PluginProxies, are not the same
+		// then we have to update the matched proxy with the expected one
+		expectedProxy.DeepCopyInto(matchingProxy)
+		shouldUpdateConsolePlugin = true
+	}
+	if shouldUpdateConsolePlugin {
+		// since the proxy array is changed at this point, update the console plugin
+		if err := r.update(r.ocpConsolePlugin); err != nil {
+			return fmt.Errorf("could not update OCP ConsolePlugin: %v", err)
+		}
+
 	}
 	return nil
 }
