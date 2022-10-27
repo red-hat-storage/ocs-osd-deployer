@@ -19,28 +19,14 @@ package templates
 import (
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // AlertmanagerTemplate is the template that serves as the base for the Alert Manager deployed by the operator
-var _3 = int32(3)
+var _1 = int32(1)
 
 var AlertmanagerTemplate = promv1.Alertmanager{
 	Spec: promv1.AlertmanagerSpec{
-		Replicas:  &_3,
+		Replicas:  &_1,
 		Resources: utils.GetResourceRequirements("alertmanager"),
-		TopologySpreadConstraints: []v1.TopologySpreadConstraint{
-			{
-				MaxSkew: 1,
-				LabelSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app": "alertmanager",
-					},
-				},
-				WhenUnsatisfiable: v1.ScheduleAnyway,
-				TopologyKey:       "kubernetes.io/hostname",
-			},
-		},
 	},
 }
