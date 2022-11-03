@@ -156,8 +156,8 @@ export ADDON_NAME = ocs-converged
 export SOP_ENDPOINT = https://red-hat-storage.github.io/ocs-sop/sop/OSD/{{ .GroupLabels.alertname }}.html
 export ALERT_SMTP_FROM_ADDR = noreply-test@test.com
 export DEPLOYMENT_TYPE = converged
-export RHOBS_ENDPOINT = test
-export RH_SSO_TOKEN_ENDPOINT = test
+export RHOBS_ENDPOINT = https://rhobs.com/fake_url
+export RH_SSO_TOKEN_ENDPOINT = https://sso.com/fake_url
 
 .PHONY: run
 run: generate fmt vet manifests export_env_vars ## Run a controller from your host.

@@ -1528,14 +1528,14 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 
 		if r.deadMansSnitchSecret.UID == "" {
 			if err := r.get(r.deadMansSnitchSecret); err != nil {
-				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+				return fmt.Errorf("Unable to get DMS secret: %v", err)
 			}
 		}
-		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
-		if dmsURL == "" {
-			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
+		snitchStr := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
+		if snitchStr == "" {
+			return fmt.Errorf("DMS secret does not contain a SNITCH_URL entry")
 		}
-		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
+		snitchURL, err := url.Parse(snitchStr)
 		if err != nil {
 			return fmt.Errorf("Unable to parse DMS url: %v", err)
 		}
@@ -1553,6 +1553,22 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			return fmt.Errorf("smtp secret does not contain a host entry")
 		}
 
+		rhobsURL, err := url.Parse(r.RHOBSEndpoint)
+		if err != nil {
+			return fmt.Errorf("Unable to parse RHOBS url: %v", err)
+		}
+		if rhobsURL.Hostname() == "" {
+			return fmt.Errorf("RHOBS url %q does not have a valid hostname", rhobsURL)
+		}
+
+		ssoURL, err := url.Parse(r.RHSSOTokenEndpoint)
+		if err != nil {
+			return fmt.Errorf("Unable to parse RHSSOTokenEndpoint url: %v", err)
+		}
+		if ssoURL.Hostname() == "" {
+			return fmt.Errorf("RHSSOTokenEndpoint url %q does not have a valid hostname", ssoURL)
+		}
+
 		dmsEgressRule := openshiftv1.EgressNetworkPolicyRule{}
 		dmsEgressRule.To.DNSName = snitchURL.Hostname()
 		dmsEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
@@ -1561,10 +1577,20 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 		smtpEgressRule.To.DNSName = smtpHost
 		smtpEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
 
+		rhobsEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+		rhobsEgressRule.To.DNSName = rhobsURL.Hostname()
+		rhobsEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+
+		ssoEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+		ssoEgressRule.To.DNSName = ssoURL.Hostname()
+		ssoEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+
 		desired.Spec.Egress = append(
 			[]openshiftv1.EgressNetworkPolicyRule{
 				dmsEgressRule,
 				smtpEgressRule,
+				rhobsEgressRule,
+				ssoEgressRule,
 			},
 			desired.Spec.Egress...,
 		)
@@ -1625,16 +1651,19 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 
 		if r.deadMansSnitchSecret.UID == "" {
 			if err := r.get(r.deadMansSnitchSecret); err != nil {
-				return fmt.Errorf("Unable to get DeadMan's Snitch secret: %v", err)
+				return fmt.Errorf("Unable to get DMS secret: %v", err)
 			}
 		}
-		dmsURL := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
-		if dmsURL == "" {
-			return fmt.Errorf("DeadMan's Snitch secret does not contain a SNITCH_URL entry")
+		snitchStr := string(r.deadMansSnitchSecret.Data["SNITCH_URL"])
+		if snitchStr == "" {
+			return fmt.Errorf("DMS secret does not contain a SNITCH_URL entry")
 		}
-		snitchURL, err := url.Parse(string(r.deadMansSnitchSecret.Data["SNITCH_URL"]))
+		snitchURL, err := url.Parse(snitchStr)
 		if err != nil {
 			return fmt.Errorf("Unable to parse DMS url: %v", err)
+		}
+		if snitchURL.Hostname() == "" {
+			return fmt.Errorf("DMS snitch url %q does not have a valid hostname", snitchURL)
 		}
 
 		if r.smtpSecret.UID == "" {
@@ -1647,6 +1676,22 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 			return fmt.Errorf("smtp secret does not contain a host entry")
 		}
 
+		rhobsURL, err := url.Parse(r.RHOBSEndpoint)
+		if err != nil {
+			return fmt.Errorf("Unable to parse RHOBS url: %v", err)
+		}
+		if rhobsURL.Hostname() == "" {
+			return fmt.Errorf("RHOBS url %q does not have a valid hostname", rhobsURL)
+		}
+
+		ssoURL, err := url.Parse(r.RHSSOTokenEndpoint)
+		if err != nil {
+			return fmt.Errorf("Unable to parse RHSSOTokenEndpoint url: %v", err)
+		}
+		if ssoURL.Hostname() == "" {
+			return fmt.Errorf("RHSSOTokenEndpoint url %q does not have a valid hostname", ssoURL)
+		}
+
 		dmsEgressRule := ovnv1.EgressFirewallRule{}
 		dmsEgressRule.To.DNSName = snitchURL.Hostname()
 		dmsEgressRule.Type = ovnv1.EgressFirewallRuleAllow
@@ -1655,10 +1700,20 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 		smtpEgressRule.To.DNSName = smtpHost
 		smtpEgressRule.Type = ovnv1.EgressFirewallRuleAllow
 
+		rhobsEgressRule := ovnv1.EgressFirewallRule{}
+		rhobsEgressRule.To.DNSName = rhobsURL.Hostname()
+		rhobsEgressRule.Type = ovnv1.EgressFirewallRuleAllow
+
+		ssoEgressRule := ovnv1.EgressFirewallRule{}
+		ssoEgressRule.To.DNSName = ssoURL.Hostname()
+		ssoEgressRule.Type = ovnv1.EgressFirewallRuleAllow
+
 		desired.Spec.Egress = append(
 			[]ovnv1.EgressFirewallRule{
 				dmsEgressRule,
 				smtpEgressRule,
+				rhobsEgressRule,
+				ssoEgressRule,
 			},
 			desired.Spec.Egress...,
 		)
