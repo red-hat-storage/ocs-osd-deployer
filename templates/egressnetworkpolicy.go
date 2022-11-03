@@ -31,6 +31,12 @@ var EgressNetworkPolicyTemplate = openshiftv1.EgressNetworkPolicy{
 			},
 			{
 				To: openshiftv1.EgressNetworkPolicyPeer{
+					CIDRSelector: "100.64.0.0/16",
+				},
+				Type: openshiftv1.EgressNetworkPolicyRuleAllow,
+			},
+			{
+				To: openshiftv1.EgressNetworkPolicyPeer{
 					CIDRSelector: "0.0.0.0/0",
 				},
 				Type: openshiftv1.EgressNetworkPolicyRuleDeny,

@@ -31,6 +31,12 @@ var EgressFirewallTemplate = ovnv1.EgressFirewall{
 			},
 			{
 				To: ovnv1.EgressFirewallDestination{
+					CIDRSelector: "100.64.0.0/16",
+				},
+				Type: ovnv1.EgressFirewallRuleAllow,
+			},
+			{
+				To: ovnv1.EgressFirewallDestination{
 					CIDRSelector: "0.0.0.0/0",
 				},
 				Type: ovnv1.EgressFirewallRuleDeny,
