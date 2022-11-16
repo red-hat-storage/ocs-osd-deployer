@@ -26,11 +26,11 @@ import (
 var resourceRequirements = map[string]corev1.ResourceRequirements{
 	"mds": {
 		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse("3000m"),
+			"cpu":    resource.MustParse("1500m"),
 			"memory": resource.MustParse("8Gi"),
 		},
 		Requests: corev1.ResourceList{
-			"cpu":    resource.MustParse("1000m"),
+			"cpu":    resource.MustParse("1500m"),
 			"memory": resource.MustParse("8Gi"),
 		},
 	},
@@ -66,11 +66,11 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 	},
 	"prometheus": {
 		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse("1"),
+			"cpu":    resource.MustParse("450m"),
 			"memory": resource.MustParse("250Mi"),
 		},
 		Requests: corev1.ResourceList{
-			"cpu":    resource.MustParse("1"),
+			"cpu":    resource.MustParse("450m"),
 			"memory": resource.MustParse("250Mi"),
 		},
 	},
