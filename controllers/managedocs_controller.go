@@ -1835,7 +1835,7 @@ func (r *ManagedOCSReconciler) hasOCSVolumes() (bool, error) {
 
 	// get all the PVs
 	pvList := &corev1.PersistentVolumeList{}
-	if err := r.UnrestrictedClient.List(r.ctx, pvList, &client.ListOptions{Limit: int64(1)}); err != nil {
+	if err := r.UnrestrictedClient.List(r.ctx, pvList); err != nil {
 		return false, fmt.Errorf("unable to list persistent volumes: %v", err)
 	}
 
