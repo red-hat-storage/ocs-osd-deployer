@@ -34,9 +34,10 @@ const (
 	osdNodeLabel         = "node.ocs.openshift.io/osd"
 )
 
-var osdNodeSelector *corev1.NodeSelector = &corev1.NodeSelector{
-	NodeSelectorTerms: []corev1.NodeSelectorTerm{
-		{
+var osdNodeSelector []corev1.PreferredSchedulingTerm = []corev1.PreferredSchedulingTerm{
+	{
+		Weight: int32(100),
+		Preference: corev1.NodeSelectorTerm{
 			MatchExpressions: []corev1.NodeSelectorRequirement{
 				{
 					Key:      osdNodeLabel,
@@ -136,7 +137,7 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 			},
 			Placement: rook.Placement{
 				NodeAffinity: &corev1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: osdNodeSelector,
+					PreferredDuringSchedulingIgnoredDuringExecution: osdNodeSelector,
 				},
 				Tolerations: []corev1.Toleration{
 					osdToleration,
@@ -147,7 +148,7 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 			},
 			PreparePlacement: rook.Placement{
 				NodeAffinity: &corev1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: osdNodeSelector,
+					PreferredDuringSchedulingIgnoredDuringExecution: osdNodeSelector,
 				},
 				Tolerations: []corev1.Toleration{
 					osdToleration,
