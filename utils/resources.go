@@ -66,11 +66,11 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 	},
 	"prometheus": {
 		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse("450m"),
+			"cpu":    resource.MustParse("400m"),
 			"memory": resource.MustParse("250Mi"),
 		},
 		Requests: corev1.ResourceList{
-			"cpu":    resource.MustParse("450m"),
+			"cpu":    resource.MustParse("400m"),
 			"memory": resource.MustParse("250Mi"),
 		},
 	},
