@@ -245,7 +245,8 @@ var _ = BeforeSuite(func() {
 		awsConfigMap.Name = utils.IMDSConfigMapName
 		awsConfigMap.Namespace = testPrimaryNamespace
 		awsConfigMap.Data = map[string]string{
-			utils.CIDRKey: "10.0.0.0/16",
+			"0": "10.0.0.0/16",
+			"1": "10.206.54.0/24",
 		}
 		Expect(k8sClient.Create(ctx, awsConfigMap)).ShouldNot(HaveOccurred())
 

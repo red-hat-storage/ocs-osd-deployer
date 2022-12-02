@@ -9,7 +9,6 @@ const (
 	// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 	IMDSv1Server      = "http://169.254.169.254"
 	IMDSConfigMapName = "aws-data"
-	CIDRKey           = "vpc-cidr"
 )
 
 func IMDSFetchIPv4CIDR(imdsServerAddr string) ([]string, error) {
