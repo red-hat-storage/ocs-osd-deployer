@@ -1502,12 +1502,14 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			}
 
 			// Get the machine cidr
-			vpcCIDRs := awsConfigMap.Data
-			if vpcCIDRs == nil {
+			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
+			if !ok {
 				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
 			}
 			// Allow egress traffic to that cidr range
 			var vpcEgressRules []openshiftv1.EgressNetworkPolicyRule
+			var vpcCIDRs []string
+			vpcCIDRs = append(vpcCIDRs, strings.Split(strings.TrimRight(vpcCIDR, "\n"), "\n")...)
 			for _, cidr := range vpcCIDRs {
 				vpcEgressRules = append(vpcEgressRules, openshiftv1.EgressNetworkPolicyRule{
 					Type: openshiftv1.EgressNetworkPolicyRuleAllow,
@@ -1626,12 +1628,14 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 			}
 
 			// Get the machine cidr
-			vpcCIDRs := awsConfigMap.Data
-			if vpcCIDRs == nil {
+			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
+			if !ok {
 				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
 			}
 			// Allow egress traffic to that cidr range
 			var vpcEgressRules []ovnv1.EgressFirewallRule
+			var vpcCIDRs []string
+			vpcCIDRs = append(vpcCIDRs, strings.Split(strings.TrimRight(vpcCIDR, "\n"), "\n")...)
 			for _, cidr := range vpcCIDRs {
 				vpcEgressRules = append(vpcEgressRules, ovnv1.EgressFirewallRule{
 					Type: ovnv1.EgressFirewallRuleAllow,
