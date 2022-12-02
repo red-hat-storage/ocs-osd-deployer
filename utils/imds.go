@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 )
 
 const (
@@ -21,13 +22,13 @@ func IMDSFetchIPv4CIDR(imdsServerAddr string) (string, error) {
 		return "", fmt.Errorf("failed to determine mac address of instance: %v", err)
 	}
 
-	var cidr string
-	endpoint = fmt.Sprintf("%s/latest/meta-data/network/interfaces/macs/%s/vpc-ipv4-cidr-block",
+	var cidrs string
+	endpoint = fmt.Sprintf("%s/latest/meta-data/network/interfaces/macs/%s/vpc-ipv4-cidr-blocks",
 		imdsServerAddr, mac)
-	cidr, err = HTTPGetAndParseBody(endpoint)
+	cidrs, err = HTTPGetAndParseBody(endpoint)
 	if err != nil {
 		return "", fmt.Errorf("Could not get VPC CIDR using mac address %q: %v", mac, err)
 	}
 
-	return cidr, nil
+	return strings.Replace(cidrs, "\n", ";", -1), nil
 }
