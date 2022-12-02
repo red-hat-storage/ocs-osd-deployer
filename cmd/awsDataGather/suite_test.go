@@ -90,9 +90,9 @@ var _ = AfterSuite(func() {
 
 const (
 	macPath  = "/latest/meta-data/mac"
-	cidrPath = "/latest/meta-data/network/interfaces/macs/ff:ff:ff:ff:ff:ff/vpc-ipv4-cidr-block"
+	cidrPath = "/latest/meta-data/network/interfaces/macs/ff:ff:ff:ff:ff:ff/vpc-ipv4-cidr-blocks"
 	fakeMac  = "ff:ff:ff:ff:ff:ff"
-	fakeCIDR = "10.0.0.0/16"
+	fakeCIDR = "10.0.0.0/16;10.206.54.0/24"
 )
 
 func runIMDSv1MockServer(listenAddr string, log logr.Logger) {
