@@ -1502,16 +1502,19 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			}
 
 			// Get the machine cidr
-			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
-			if !ok {
+			vpcCIDRs := awsConfigMap.Data
+			if vpcCIDRs == nil {
 				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
 			}
 			// Allow egress traffic to that cidr range
-			vpcEgressRule := openshiftv1.EgressNetworkPolicyRule{
-				Type: openshiftv1.EgressNetworkPolicyRuleAllow,
-				To: openshiftv1.EgressNetworkPolicyPeer{
-					CIDRSelector: vpcCIDR,
-				},
+			var vpcEgressRules []openshiftv1.EgressNetworkPolicyRule
+			for _, cidr := range vpcCIDRs {
+				vpcEgressRules = append(vpcEgressRules, openshiftv1.EgressNetworkPolicyRule{
+					Type: openshiftv1.EgressNetworkPolicyRuleAllow,
+					To: openshiftv1.EgressNetworkPolicyPeer{
+						CIDRSelector: cidr,
+					},
+				})
 			}
 
 			// Inserting the VPC Egress rule in front of all other egress rules.
@@ -1519,9 +1522,7 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			// https://docs.openshift.com/container-platform/4.10/networking/openshift_sdn/configuring-egress-firewall.html#policy-rule-order_openshift-sdn-egress-firewall
 			// Inserting this rule in the front ensures it comes before the EgressNetworkPolicyRuleDeny rule.
 			desired.Spec.Egress = append(
-				[]openshiftv1.EgressNetworkPolicyRule{
-					vpcEgressRule,
-				},
+				vpcEgressRules,
 				desired.Spec.Egress...,
 			)
 		}
@@ -1625,16 +1626,19 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 			}
 
 			// Get the machine cidr
-			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
-			if !ok {
+			vpcCIDRs := awsConfigMap.Data
+			if vpcCIDRs == nil {
 				return fmt.Errorf("Unable to determine machine CIDR from AWS ConfigMap")
 			}
 			// Allow egress traffic to that cidr range
-			vpcEgressRule := ovnv1.EgressFirewallRule{
-				Type: ovnv1.EgressFirewallRuleAllow,
-				To: ovnv1.EgressFirewallDestination{
-					CIDRSelector: vpcCIDR,
-				},
+			var vpcEgressRules []ovnv1.EgressFirewallRule
+			for _, cidr := range vpcCIDRs {
+				vpcEgressRules = append(vpcEgressRules, ovnv1.EgressFirewallRule{
+					Type: ovnv1.EgressFirewallRuleAllow,
+					To: ovnv1.EgressFirewallDestination{
+						CIDRSelector: cidr,
+					},
+				})
 			}
 
 			// Inserting the VPC Egress rule in front of all other egress rules.
@@ -1642,9 +1646,7 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 			// https://docs.openshift.com/container-platform/4.10/networking/openshift_sdn/configuring-egress-firewall.html#policy-rule-order_openshift-sdn-egress-firewall
 			// Inserting this rule in the front ensures it comes before the EgressNetworkPolicyRuleDeny rule.
 			desired.Spec.Egress = append(
-				[]ovnv1.EgressFirewallRule{
-					vpcEgressRule,
-				},
+				vpcEgressRules,
 				desired.Spec.Egress...,
 			)
 		}

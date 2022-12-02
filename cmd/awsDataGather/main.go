@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/red-hat-storage/ocs-osd-deployer/utils"
@@ -104,9 +105,14 @@ func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClien
 	log := ctrl.Log.WithName("GatherData")
 
 	log.Info("Fetching AWS VPC IPv4 CIDR data")
-	cidr, err := utils.IMDSFetchIPv4CIDR(imdsServer)
+	cidrs, err := utils.IMDSFetchIPv4CIDR(imdsServer)
 	if err != nil {
 		return fmt.Errorf("Failed to get VPC IPv4 CIDR: %v", err)
+	}
+
+	cidrMap := make(map[string]string)
+	for i, val := range cidrs {
+		cidrMap[strconv.Itoa(i)] = val
 	}
 
 	log.Info("Creating Config Map with AWS data")
@@ -129,9 +135,7 @@ func gatherAndSaveData(imdsServer string, deployment appsv1.Deployment, k8sClien
 			},
 		}
 
-		configMap.Data = map[string]string{
-			utils.CIDRKey: cidr,
-		}
+		configMap.Data = cidrMap
 
 		return nil
 	})
