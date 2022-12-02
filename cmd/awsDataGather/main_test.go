@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -50,9 +51,12 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			By("having the VPC cidr key")
-			vpcCIDR, ok := awsConfigMap.Data[utils.CIDRKey]
-			Expect(ok).To(Equal(true))
-			Expect(vpcCIDR).To(Equal(fakeCIDR))
+			vpcCIDR := awsConfigMap.Data
+			fmt.Println(vpcCIDR)
+			Expect(vpcCIDR).To(Equal(map[string]string{
+				"0": "10.0.0.0/16",
+				"1": "10.206.54.0/24",
+			}))
 
 			By("having a deployment owner reference")
 			Expect(len(awsConfigMap.OwnerReferences)).To(Equal(1))
@@ -81,9 +85,11 @@ var _ = Describe("AWS Data Gathering behavior", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				By("adding VPC cidr key")
-				vpcCIDR, ok := configMap.Data[utils.CIDRKey]
-				Expect(ok).To(Equal(true))
-				Expect(vpcCIDR).To(Equal(fakeCIDR))
+				vpcCIDR := configMap.Data
+				Expect(vpcCIDR).To(Equal(map[string]string{
+					"0": "10.0.0.0/16",
+					"1": "10.206.54.0/24",
+				}))
 
 				By("adding a deployment owner reference")
 				Expect(len(configMap.OwnerReferences)).To(Equal(1))
