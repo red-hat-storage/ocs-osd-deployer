@@ -1508,9 +1508,8 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			}
 			// Allow egress traffic to that cidr range
 			var vpcEgressRules []openshiftv1.EgressNetworkPolicyRule
-			var vpcCIDRs []string
-			vpcCIDRs = append(vpcCIDRs, strings.Split(strings.TrimRight(vpcCIDR, "\n"), "\n")...)
-			for _, cidr := range vpcCIDRs {
+			cidrList := strings.Split(vpcCIDR, ";")
+			for _, cidr := range cidrList {
 				vpcEgressRules = append(vpcEgressRules, openshiftv1.EgressNetworkPolicyRule{
 					Type: openshiftv1.EgressNetworkPolicyRuleAllow,
 					To: openshiftv1.EgressNetworkPolicyPeer{
@@ -1634,9 +1633,8 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 			}
 			// Allow egress traffic to that cidr range
 			var vpcEgressRules []ovnv1.EgressFirewallRule
-			var vpcCIDRs []string
-			vpcCIDRs = append(vpcCIDRs, strings.Split(strings.TrimRight(vpcCIDR, "\n"), "\n")...)
-			for _, cidr := range vpcCIDRs {
+			cidrList := strings.Split(vpcCIDR, ";")
+			for _, cidr := range cidrList {
 				vpcEgressRules = append(vpcEgressRules, ovnv1.EgressFirewallRule{
 					Type: ovnv1.EgressFirewallRuleAllow,
 					To: ovnv1.EgressFirewallDestination{
