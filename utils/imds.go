@@ -29,7 +29,6 @@ func IMDSFetchIPv4CIDR(imdsServerAddr string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("Could not get VPC CIDR using mac address %q: %v", mac, err)
 	}
-	cidrs = strings.Replace(cidrs, "\n", ";", -1)
 
-	return cidrs, nil
+	return strings.Replace(cidrs, "\n", ";", -1), nil
 }
