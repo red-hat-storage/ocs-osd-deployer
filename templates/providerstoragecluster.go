@@ -31,28 +31,7 @@ import (
 
 const (
 	ProviderOSDSizeInTiB = 4
-	osdNodeLabel         = "node.ocs.openshift.io/osd"
 )
-
-var osdNodeSelector *corev1.NodeSelector = &corev1.NodeSelector{
-	NodeSelectorTerms: []corev1.NodeSelectorTerm{
-		{
-			MatchExpressions: []corev1.NodeSelectorRequirement{
-				{
-					Key:      osdNodeLabel,
-					Operator: corev1.NodeSelectorOpExists,
-				},
-			},
-		},
-	},
-}
-
-var osdToleration corev1.Toleration = corev1.Toleration{
-	Key:      osdNodeLabel,
-	Operator: corev1.TolerationOpEqual,
-	Value:    "true",
-	Effect:   corev1.TaintEffectNoSchedule,
-}
 
 var commonTSC corev1.TopologySpreadConstraint = corev1.TopologySpreadConstraint{
 	MaxSkew:           1,
@@ -135,23 +114,11 @@ var ProviderStorageClusterTemplate = ocsv1.StorageCluster{
 				},
 			},
 			Placement: rook.Placement{
-				NodeAffinity: &corev1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: osdNodeSelector,
-				},
-				Tolerations: []corev1.Toleration{
-					osdToleration,
-				},
 				TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
 					commonTSC,
 				},
 			},
 			PreparePlacement: rook.Placement{
-				NodeAffinity: &corev1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: osdNodeSelector,
-				},
-				Tolerations: []corev1.Toleration{
-					osdToleration,
-				},
 				TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
 					commonTSC,
 					preparePlacementTSC,
