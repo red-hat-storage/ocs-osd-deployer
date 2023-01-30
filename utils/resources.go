@@ -57,11 +57,11 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 	"sds": {
 		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse("1750m"),
-			"memory": resource.MustParse("5700Mi"),
+			"memory": resource.MustParse("7Gi"),
 		},
 		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse("1750m"),
-			"memory": resource.MustParse("5700Mi"),
+			"memory": resource.MustParse("7Gi"),
 		},
 	},
 	"prometheus": {
