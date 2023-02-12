@@ -35,7 +35,7 @@ const (
 
 var commonTSC corev1.TopologySpreadConstraint = corev1.TopologySpreadConstraint{
 	MaxSkew:           1,
-	TopologyKey:       "kubernetes.io/hostname",
+	TopologyKey:       "topology.kubernetes.io/zone",
 	WhenUnsatisfiable: corev1.DoNotSchedule,
 	LabelSelector: &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -50,7 +50,7 @@ var commonTSC corev1.TopologySpreadConstraint = corev1.TopologySpreadConstraint{
 
 var preparePlacementTSC corev1.TopologySpreadConstraint = corev1.TopologySpreadConstraint{
 	MaxSkew:           1,
-	TopologyKey:       "topology.kubernetes.io/zone",
+	TopologyKey:       "kubernetes.io/hostname",
 	WhenUnsatisfiable: corev1.DoNotSchedule,
 	LabelSelector: &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
