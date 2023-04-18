@@ -2,7 +2,6 @@ package testutils
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -68,14 +67,6 @@ func ProbeReadiness() (int, error) {
 		return 0, err
 	}
 	return resp.StatusCode, nil
-}
-
-func ToJsonOrDie(value interface{}) []byte {
-	if bytes, err := json.Marshal(value); err == nil {
-		return bytes
-	} else {
-		panic(err)
-	}
 }
 
 func WaitForAlertManagerSMTPReceiverEmailConfigToUpdate(

@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -114,4 +115,12 @@ func DeploymentNameFromPodName(podName string) (string, error) {
 		return "", fmt.Errorf("invalid pod name")
 	}
 	return podName[0:i], nil
+}
+
+func ToJsonOrDie(value interface{}) []byte {
+	if bytes, err := json.Marshal(value); err == nil {
+		return bytes
+	} else {
+		panic(err)
+	}
 }
