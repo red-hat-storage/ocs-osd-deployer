@@ -329,6 +329,12 @@ var _ = Describe("ManagedOCS controller", func() {
 			Enable:   true,
 		},
 	}
+	odfSubscriptionTemplate := opv1a1.Subscription{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-operator-sub",
+			Namespace: testPrimaryNamespace,
+		},
+	}
 	remoteWriteRegexString := "(ALERTS;(CephMdsMissingReplicas|CephMgrIsAbsent|CephMgrIsMissingReplicas|CephNodeDown|" +
 		"CephClusterErrorState|CephClusterWarningState|CephOSDVersionMismatch|CephMonVersionMismatch|CephOSDFlapping|" +
 		"CephOSDDiskNotResponding|CephOSDDiskUnavailable|CephDataRecoveryTakingTooLong|CephPGRepairTakingTooLong|" +
@@ -921,6 +927,15 @@ var _ = Describe("ManagedOCS controller", func() {
 				configMap := rookConfigMapTemplate.DeepCopy()
 				Expect(k8sClient.Get(ctx, utils.GetResourceKey(configMap), configMap)).Should(Succeed())
 				Expect(configMap.Data["test-key"]).Should(Equal("test-value"))
+			})
+		})
+		When("current odf subscription channel is different from the desired subscription channel", func() {
+			It("should update the odf subscription channel", func() {
+				Eventually(func() string {
+					testSubscription := odfSubscriptionTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(testSubscription), testSubscription)).Should(Succeed())
+					return testSubscription.Spec.Channel
+				}, timeout, interval).Should(Equal(desiredODFSubscriptionChannel))
 			})
 		})
 		When("there is no rook-ceph-operator-config ConfigMap", func() {

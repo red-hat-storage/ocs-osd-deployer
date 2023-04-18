@@ -293,6 +293,16 @@ var _ = BeforeSuite(func() {
 		ocsCSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = getMockOCSCSVDeploymentSpec()
 		Expect(k8sClient.Create(ctx, ocsCSV)).ShouldNot(HaveOccurred())
 
+		// create a mock ODF subscription
+		odfSubscription := &opv1a1.Subscription{}
+		odfSubscription.Name = "odf-operator-sub"
+		odfSubscription.Namespace = testPrimaryNamespace
+		odfSubscription.Spec = &opv1a1.SubscriptionSpec{
+			Package: odfOLMPackageName,
+			Channel: "stable-4.10",
+		}
+		Expect(k8sClient.Create(ctx, odfSubscription)).ShouldNot(HaveOccurred())
+
 		// Create the ManagedOCS resource
 		managedOCS := &v1.ManagedOCS{}
 		managedOCS.Name = managedOCSName
