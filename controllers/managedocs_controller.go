@@ -107,6 +107,8 @@ const (
 	rhobsRemoteWriteConfigIdSecretKey    = "prom-remote-write-config-id"
 	rhobsRemoteWriteConfigSecretName     = "prom-remote-write-config-secret"
 	csiKMSConnectionDetailsConfigMapName = "csi-kms-connection-details"
+	desiredODFSubscriptionChannel        = "stable-4.11"
+	odfOLMPackageName                    = "odf-operator"
 )
 
 // ManagedOCSReconciler reconciles a ManagedOCS object
@@ -171,6 +173,7 @@ type ManagedOCSReconciler struct {
 // +kubebuilder:rbac:groups="monitoring.coreos.com",namespace=system,resources=servicemonitors,verbs=get;list;watch;update;patch;create;delete
 // +kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups=operators.coreos.com,namespace=system,resources=clusterserviceversions,verbs=get;list;watch;delete;update;patch
+// +kubebuilder:rbac:groups="operators.coreos.com",resources=subscriptions,verbs=get;watch;list;update
 // +kubebuilder:rbac:groups="apps",namespace=system,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={persistentvolumes,secrets},verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources={services},verbs=get;list;watch;create;update
@@ -267,6 +270,18 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 		},
 	)
 
+	subPredicate := builder.WithPredicates(
+		predicate.NewPredicateFuncs(
+			func(client client.Object) bool {
+				if instance, ok := client.(*opv1a1.Subscription); ok {
+					// ignore if not a odf-operator subscription
+					return instance.Spec.Package != odfOLMPackageName
+				}
+				return false
+			},
+		),
+	)
+
 	managedOCSController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(*ctrlOptions).
 		For(&v1.ManagedOCS{}, managedOCSPredicates).
@@ -322,6 +337,11 @@ func (r *ManagedOCSReconciler) SetupWithManager(mgr ctrl.Manager, ctrlOptions *c
 			&source.Kind{Type: &opv1a1.ClusterServiceVersion{}},
 			enqueueManangedOCSRequest,
 			csvPredicates,
+		).
+		Watches(
+			&source.Kind{Type: &opv1a1.Subscription{}},
+			enqueueManangedOCSRequest,
+			subPredicate,
 		)
 
 	if r.AvailableCRDs[EgressFirewallCRD] {
@@ -550,6 +570,9 @@ func (r *ManagedOCSReconciler) reconcilePhases() (reconcile.Result, error) {
 		}
 
 		// Reconcile the different resources
+		if err := r.reconcileODFSubscription(); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.reconcileRookCephOperatorConfig(); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -2088,4 +2111,32 @@ func (r *ManagedOCSReconciler) setDeviceSetCount(deviceSet *ocsv1.StorageDeviceS
 		r.Log.V(-1).Info("Requested storage device set count will result in downscaling, which is not supported. Skipping")
 		deviceSet.Count = currDeviceSetCount
 	}
+}
+
+func (r *ManagedOCSReconciler) reconcileODFSubscription() error {
+	subList := &opv1a1.SubscriptionList{}
+	if err := r.list(subList); err != nil {
+		return fmt.Errorf("Unable to list subscriptions %v", err)
+	}
+	var odfSub *opv1a1.Subscription = nil
+	for index := range subList.Items {
+		item := &subList.Items[index]
+		if item.Spec.Package == odfOLMPackageName {
+			odfSub = item
+			break
+		}
+	}
+	if odfSub == nil {
+		return fmt.Errorf("Failed to find package name %s", odfOLMPackageName)
+	}
+	if odfSub.Spec.Channel == desiredODFSubscriptionChannel {
+		return nil
+	}
+	r.Log.Info("Initiating ODF minor version upgrade by switiching channels", "current channel", odfSub.Spec.Channel, "new channel", desiredODFSubscriptionChannel)
+	odfSub.Spec.Channel = desiredODFSubscriptionChannel
+
+	if err := r.update(odfSub); err != nil {
+		return fmt.Errorf("Failed to update %s subscription %v", odfOLMPackageName, err)
+	}
+	return nil
 }
