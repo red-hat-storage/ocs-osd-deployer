@@ -97,11 +97,11 @@ var resourceRequirements = map[string]corev1.ResourceRequirements{
 	"rook-ceph-operator": {
 		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse("300m"),
-			"memory": resource.MustParse("200Mi"),
+			"memory": resource.MustParse("250Mi"),
 		},
 		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse("300m"),
-			"memory": resource.MustParse("200Mi"),
+			"memory": resource.MustParse("250Mi"),
 		},
 	},
 	"ocs-metrics-exporter": {
