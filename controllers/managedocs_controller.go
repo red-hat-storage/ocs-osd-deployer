@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -1598,6 +1599,29 @@ func (r *ManagedOCSReconciler) reconcileEgressNetworkPolicy() error {
 			)
 		}
 
+		if r.DeploymentType == consumerDeploymentType {
+
+			storageProviderEndpointURL := r.addonParams[storageProviderEndpointKey]
+			storageProviderEndpointHost := strings.Split(storageProviderEndpointURL, ":")[0]
+
+			if storageProviderEndpointHost == "" {
+				return fmt.Errorf("storageProviderEndpoint does not contain a host entry")
+			}
+
+			if ip := net.ParseIP(storageProviderEndpointHost); ip == nil {
+				loadBalancerEgressRule := openshiftv1.EgressNetworkPolicyRule{}
+				loadBalancerEgressRule.To.DNSName = storageProviderEndpointHost
+				loadBalancerEgressRule.Type = openshiftv1.EgressNetworkPolicyRuleAllow
+
+				desired.Spec.Egress = append(
+					[]openshiftv1.EgressNetworkPolicyRule{
+						loadBalancerEgressRule,
+					},
+					desired.Spec.Egress...,
+				)
+			}
+		}
+
 		if r.deadMansSnitchSecret.UID == "" {
 			if err := r.get(r.deadMansSnitchSecret); err != nil {
 				return fmt.Errorf("Unable to get DMS secret: %v", err)
@@ -1724,6 +1748,29 @@ func (r *ManagedOCSReconciler) reconcileEgressFirewall() error {
 				vpcEgressRules,
 				desired.Spec.Egress...,
 			)
+		}
+
+		if r.DeploymentType == consumerDeploymentType {
+
+			storageProviderEndpointURL := r.addonParams[storageProviderEndpointKey]
+			storageProviderEndpointHost := strings.Split(storageProviderEndpointURL, ":")[0]
+
+			if storageProviderEndpointHost == "" {
+				return fmt.Errorf("storageProviderEndpoint does not contain a host entry")
+			}
+
+			if ip := net.ParseIP(storageProviderEndpointHost); ip == nil {
+				loadBalancerEgressRule := ovnv1.EgressFirewallRule{}
+				loadBalancerEgressRule.To.DNSName = storageProviderEndpointHost
+				loadBalancerEgressRule.Type = ovnv1.EgressFirewallRuleAllow
+
+				desired.Spec.Egress = append(
+					[]ovnv1.EgressFirewallRule{
+						loadBalancerEgressRule,
+					},
+					desired.Spec.Egress...,
+				)
+			}
 		}
 
 		if r.deadMansSnitchSecret.UID == "" {

@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	ovnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/egressfirewall/v1"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	openshiftv1 "github.com/openshift/api/network/v1"
 	opv1a1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
+	ovnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/egressfirewall/v1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	promv1a1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
@@ -1746,6 +1745,33 @@ var _ = Describe("ManagedOCS controller", func() {
 				}, timeout, interval).Should(Equal(true))
 			})
 		})
+		When("the storageProviderEndpoint in addon params is modified", func() {
+			It("should update the EgressNetworkPolicy resource with the new host", func() {
+				if !testReconciler.AvailableCRDs[EgressNetworkPolicyCRD] {
+					Skip("Skipping this test as EgressNetworkPolicy is not present")
+				}
+				if testReconciler.DeploymentType != consumerDeploymentType {
+					Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+				}
+				addonParamsSecret := addonParamsSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(addonParamsSecret), addonParamsSecret)).Should(Succeed())
+				addonParamsSecret.Data[storageProviderEndpointKey] = []byte("myLoadBalancerHostName:50051")
+				Expect(k8sClient.Update(ctx, addonParamsSecret)).Should(Succeed())
+
+				Eventually(func() bool {
+					egress := egressNetworkPolicyTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(egress), egress)).Should(Succeed())
+					egressRules := egress.Spec.Egress
+					for i := range egressRules {
+						egressRule := &egressRules[i]
+						if egressRule.To.DNSName == "myLoadBalancerHostName" {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
 		When("the EgressNetworkPolicy resource is deleted", func() {
 			It("should create a new EgressNetworkPolicy in the namespace", func() {
 				if !testReconciler.AvailableCRDs[EgressNetworkPolicyCRD] {
@@ -1825,6 +1851,33 @@ var _ = Describe("ManagedOCS controller", func() {
 					for i := range egressRules {
 						egressRule := &egressRules[i]
 						if egressRule.To.DNSName == "test-host-2" {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(Equal(true))
+			})
+		})
+		When("the storageProviderEndpoint in addon params is modified", func() {
+			It("should update the EgressFirewall resource with the new host", func() {
+				if !testReconciler.AvailableCRDs[EgressFirewallCRD] {
+					Skip("Skipping this test as EgressFirewall is not present")
+				}
+				if testReconciler.DeploymentType != consumerDeploymentType {
+					Skip(fmt.Sprintf("Skipping this test for %v deployment", testReconciler.DeploymentType))
+				}
+				addonParamsSecret := addonParamsSecretTemplate.DeepCopy()
+				Expect(k8sClient.Get(ctx, utils.GetResourceKey(addonParamsSecret), addonParamsSecret)).Should(Succeed())
+				addonParamsSecret.Data[storageProviderEndpointKey] = []byte("myLoadBalancerHostName:50051")
+				Expect(k8sClient.Update(ctx, addonParamsSecret)).Should(Succeed())
+
+				Eventually(func() bool {
+					egress := egressFirewallTemplate.DeepCopy()
+					Expect(k8sClient.Get(ctx, utils.GetResourceKey(egress), egress)).Should(Succeed())
+					egressRules := egress.Spec.Egress
+					for i := range egressRules {
+						egressRule := &egressRules[i]
+						if egressRule.To.DNSName == "myLoadBalancerHostName" {
 							return true
 						}
 					}
