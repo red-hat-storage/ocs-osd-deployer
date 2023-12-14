@@ -1,8 +1,8 @@
 # ===== Overridable Variables ===== #
 
 # Current Operator version
-VERSION ?= 2.1.2
-REPLACES ?= 2.1.1
+VERSION ?= 2.1.3
+REPLACES ?= 2.1.2
 
 # Default bundle image tag
 IMAGE_TAG_BASE ?= controller
